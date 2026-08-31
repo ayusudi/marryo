@@ -1,0 +1,30 @@
+{
+  "name": "marryo",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Marryo - AI-powered pre-wedding film director",
+  "workspaces": [
+    "services",
+    "web"
+  ],
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "dev": "npm run dev --workspace web",
+    "build": "npm run build --workspace web",
+    "start": "npm run start --workspace web",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "check:env": "node --env-file-if-exists=.env scripts/check-env.ts",
+    "ping:clickhouse": "node --env-file-if-exists=.env scripts/ping-clickhouse.ts",
+    "ping:agent": "node --env-file-if-exists=.env scripts/ping-agent.ts",
+    "agent:dev": "cd agent && .venv/bin/adk web .",
+    "agent:verify": "agent/.venv/bin/python scripts/verify_cv.py",
+    "ping:gemini": "agent/.venv/bin/python scripts/ping_gemini.py"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "typescript": "^5.9.3"
+  }
+}

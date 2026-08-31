@@ -1,0 +1,46 @@
+# dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# next
+web/.next/
+web/out/
+.next/
+next-env.d.ts
+
+# build output
+dist/
+*.tsbuildinfo
+
+# python
+agent/.venv/
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
+# env + credentials - never commit
+.env
+.env.*
+!.env.example
+*-service-account*.json
+*credentials*.json
+gcp-key*.json
+
+# media / working files
+media/
+tmp/
+*.mp4
+*.mov
+*.MP4
+*.MOV
+
+# os / editor
+.DS_Store
+*.log
+.vscode/
+.idea/
+.cursor/

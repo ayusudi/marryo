@@ -1,0 +1,17 @@
+# Marryo agent - Python 3.13
+# Google ADK + Agent Engine (pulls in google-adk and google-genai)
+google-cloud-aiplatform[adk,agent-engines]>=2.0.1
+
+# Video / CV - used by the validation, identity and scene-detection tools
+opencv-python>=5.0.0
+mediapipe>=1.0.1
+scenedetect[opencv]>=0.7.1
+numpy>=2.1
+pillow>=11.0
+
+# Data + storage
+clickhouse-connect>=1.7.2
+google-cloud-storage>=3.6
+
+# Config
+python-dotenv>=1.1
