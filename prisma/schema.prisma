@@ -1,0 +1,199 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+/// Signed-in account (Google `sub`). Created on first authenticated API use.
+model User {
+  userId    String   @id @map("user_id")
+  email     String?
+  name      String?
+  image     String?
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("users")
+}
+
+/// One couple's film. ownerId is reserved for auth (unused in Phase 1).
+model Project {
+  projectId       String   @id @map("project_id")
+  ownerId         String?  @map("owner_id")
+  coupleNames     String   @map("couple_names") // JSON array of 1–2 { name, role: bride|groom }
+  weddingDate     String?  @map("wedding_date")
+  story           String?
+  maxDuration     Int      @default(90) @map("max_duration")
+  mood            String?
+  visualTone      String?  @map("visual_tone")
+  endingMessage   String?  @map("ending_message")
+  orientation     String   @default("landscape") // landscape | portrait
+  status          String   @default("draft")
+  currentStage    String   @default("upload") @map("current_stage")
+  bridePersonId   String?  @map("bride_person_id")
+  groomPersonId   String?  @map("groom_person_id")
+  stageMessage    String?  @map("stage_message")
+  /// When the editing session was closed (grade confirmed). Retention cleanup runs then.
+  sessionEndedAt  DateTime? @map("session_ended_at")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+  clips           Clip[]
+  persons         Person[]
+  editDecisions       EditDecision[]
+  renders             Render[]
+  soundtrackSessions  SoundtrackSession[]
+  films               Film[]
+
+  @@map("projects")
+}
+
+model Clip {
+  clipId              String   @id @map("clip_id")
+  projectId           String   @map("project_id")
+  filename            String
+  storageUri          String?  @map("storage_uri")
+  duration            Float?
+  uploadedAt          DateTime @default(now()) @map("uploaded_at")
+  status              String   @default("uploaded")
+  valid               Boolean?
+  validationWarnings  String?  @map("validation_warnings") // JSON: { warnings, metrics }
+  thumbnailUri        String?  @map("thumbnail_uri")
+  project             Project  @relation(fields: [projectId], references: [projectId], onDelete: Cascade)
+  clipPersons         ClipPerson[]
+
+  @@index([projectId])
+  @@map("clips")
+}
+
+/// Face cluster discovered by /identify for a project.
+model Person {
+  personId      String   @id @map("person_id")
+  projectId     String   @map("project_id")
+  thumbnailUris String   @map("thumbnail_uris") // JSON string[]
+  faceCount     Int      @default(0) @map("face_count")
+  createdAt     DateTime @default(now()) @map("created_at")
+  project       Project  @relation(fields: [projectId], references: [projectId], onDelete: Cascade)
+  clipPersons   ClipPerson[]
+
+  @@index([projectId])
+  @@map("persons")
+}
+
+/// Which clips a person appears in (for later bride/groom presence checks).
+model ClipPerson {
+  id       String @id
+  clipId   String @map("clip_id")
+  personId String @map("person_id")
+  clip     Clip   @relation(fields: [clipId], references: [clipId], onDelete: Cascade)
+  person   Person @relation(fields: [personId], references: [personId], onDelete: Cascade)
+
+  @@unique([clipId, personId])
+  @@map("clip_persons")
+}
+
+/// Persisted Edit Decision List from the Film Director agent.
+model EditDecision {
+  editId         String   @id @map("edit_id")
+  projectId      String   @map("project_id")
+  version        Int      @default(1)
+  targetDuration Int      @map("target_duration")
+  edlJson        String   @map("edl_json")
+  valid          Boolean
+  issues         String?  // JSON array of validation issues
+  createdAt      DateTime @default(now()) @map("created_at")
+  project        Project  @relation(fields: [projectId], references: [projectId], onDelete: Cascade)
+
+  @@index([projectId])
+  @@map("edit_decisions")
+}
+
+/// Rendered MP4 output from an EditDecision (Phase 6).
+model Render {
+  renderId    String   @id @map("render_id")
+  projectId   String   @map("project_id")
+  editId      String   @map("edit_id")
+  storageUri  String?  @map("storage_uri")
+  duration    Float?
+  width       Int?
+  height      Int?
+  orientation String   @default("landscape") // landscape | portrait (snapshot at render time)
+  typographyJson String? @map("typography_json") // JSON: title/ending decisions + features
+  status      String   @default("rendering") // rendering | ready | failed
+  evaluation  String? // JSON: { passed, checks[], metrics }
+  errorText   String?  @map("error_text")
+  createdAt   DateTime @default(now()) @map("created_at")
+  project     Project  @relation(fields: [projectId], references: [projectId], onDelete: Cascade)
+
+  @@index([projectId])
+  @@map("renders")
+}
+
+/// Soundtrack chooser session: top-5 scored tracks remuxed onto a picture-locked render.
+model SoundtrackSession {
+  sessionId           String   @id @map("session_id")
+  projectId           String   @map("project_id")
+  pictureRenderId     String   @map("picture_render_id")
+  recommendationsJson String   @map("recommendations_json") // scored top-N payload
+  selectedVersionId   String?  @map("selected_version_id")
+  selectedMode        String?  @map("selected_mode") // catalog | mute | original
+  status              String   @default("generating") // generating | ready | failed
+  errorText           String?  @map("error_text")
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+  project             Project  @relation(fields: [projectId], references: [projectId], onDelete: Cascade)
+  versions            SoundtrackVersion[]
+
+  @@index([projectId])
+  @@map("soundtrack_sessions")
+}
+
+/// One remuxed MP4 for a recommended track (Option B: five versions to compare).
+model SoundtrackVersion {
+  versionId  String   @id @map("version_id")
+  sessionId  String   @map("session_id")
+  rank       Int
+  trackId    String   @map("track_id")
+  title      String
+  artist     String?
+  score      Float?
+  tagsJson   String?  @map("tags_json")
+  storageUri String?  @map("storage_uri")
+  status     String   @default("pending") // pending | ready | failed
+  errorText  String?  @map("error_text")
+  createdAt  DateTime @default(now()) @map("created_at")
+  session    SoundtrackSession @relation(fields: [sessionId], references: [sessionId], onDelete: Cascade)
+
+  @@index([sessionId])
+  @@map("soundtrack_versions")
+}
+
+/// Finished film the user chose (soundtrack or mute). Browser creates = private.
+/// Set visibility=public only via DB (or admin) to feature on the landing page.
+model Film {
+  filmId                String   @id @map("film_id")
+  projectId             String   @map("project_id")
+  storageUri            String   @map("storage_uri")
+  title                 String?
+  coupleLabel           String?  @map("couple_label")
+  trackId               String?  @map("track_id")
+  trackTitle            String?  @map("track_title")
+  visibility            String   @default("private") // private | public
+  orientation           String?
+  duration              Float?
+  width                 Int?
+  height                Int?
+  soundtrackSessionId   String?  @map("soundtrack_session_id")
+  soundtrackVersionId   String?  @map("soundtrack_version_id")
+  pictureRenderId       String?  @map("picture_render_id")
+  thumbnailUri          String?  @map("thumbnail_uri") // JPEG poster extracted from the MP4
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @updatedAt @map("updated_at")
+  project               Project  @relation(fields: [projectId], references: [projectId], onDelete: Cascade)
+
+  @@index([projectId])
+  @@index([visibility])
+  @@map("films")
+}

@@ -2,6 +2,7 @@
   "name": "marryo",
   "version": "0.0.0",
   "private": true,
+  "license": "Apache-2.0",
   "type": "module",
   "description": "Marryo - AI-powered pre-wedding film director",
   "workspaces": [
@@ -19,12 +20,25 @@
     "check:env": "node --env-file-if-exists=.env scripts/check-env.ts",
     "ping:clickhouse": "node --env-file-if-exists=.env scripts/ping-clickhouse.ts",
     "ping:agent": "node --env-file-if-exists=.env scripts/ping-agent.ts",
-    "agent:dev": "cd agent && .venv/bin/adk web .",
+    "agent:dev": "agent/.venv/bin/python scripts/agent-dev.py",
     "agent:verify": "agent/.venv/bin/python scripts/verify_cv.py",
-    "ping:gemini": "agent/.venv/bin/python scripts/ping_gemini.py"
+    "ping:gemini": "agent/.venv/bin/python scripts/ping_gemini.py",
+    "db:generate": "prisma generate --schema prisma/schema.prisma",
+    "db:migrate": "prisma migrate dev --schema prisma/schema.prisma",
+    "db:push": "prisma db push --schema prisma/schema.prisma",
+    "db:clickhouse": "node --env-file-if-exists=.env scripts/migrate-clickhouse.ts",
+    "sample:clips": "agent/.venv/bin/python scripts/generate_sample_clips.py",
+    "sample:fonts": "agent/.venv/bin/python scripts/fetch-fonts.py",
+    "sample:music": "agent/.venv/bin/python scripts/fetch-music-catalog.py",
+    "test:pipeline": "node --env-file-if-exists=.env scripts/test-pipeline.ts",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:install": "playwright install chromium"
   },
   "devDependencies": {
+    "@playwright/test": "^1.63.0",
     "@types/node": "^24.10.1",
+    "prisma": "^6.16.2",
     "typescript": "^5.9.3"
   }
 }

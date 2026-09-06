@@ -6,7 +6,8 @@ understands the scenes, and cuts a highlight film.
 Built for the Agentic Cinema hackathon on Google ADK / Agent Engine, Gemini, ClickHouse,
 FFmpeg and Next.js.
 
-> Phase 0: environment scaffolding only. There is no product functionality yet.
+> Phase 6: FFmpeg MP4 render from validated EDLs, post-render evaluation, GCS delivery. Film Director + scene detection + ClickHouse/MCP from earlier phases. No frontend pages yet.
+> Interactive API docs: http://localhost:3100/api/docs (Swagger UI)
 
 ## Layout
 
@@ -17,7 +18,7 @@ FFmpeg and Next.js.
 | `agent/`     | Python ADK agent (the Film Director) and its tools                          |
 | `agent/tools/` | One file per ADK tool function                                            |
 | `agent/cv/`  | Validation, identity clustering, scene detection (plain Python, not LLM calls) |
-| `scripts/`   | CLI scripts for exercising the backend without a UI                         |
+| `mcp/toolbox/` | MCP Database Toolbox `tools.yaml` for ClickHouse query tools |
 
 The Next.js API layer calls the ADK agent over HTTP. ADK is Python-native and is not
 reimplemented in TypeScript.
@@ -34,6 +35,8 @@ reimplemented in TypeScript.
 ```bash
 # 1. Node workspaces
 npm install
+npm run db:generate
+npm run db:push
 
 # 2. Python agent environment
 cd agent
@@ -47,7 +50,10 @@ cp .env.example .env
 cp agent/.env.example agent/.env
 # then fill both in
 
-# 4. Google Cloud auth (interactive, opens a browser)
+# 4. Sample clips for pipeline tests
+npm run sample:clips
+
+# 5. Google Cloud auth (interactive, opens a browser)
 gcloud init
 gcloud auth application-default login
 gcloud services enable aiplatform.googleapis.com storage.googleapis.com
@@ -71,10 +77,25 @@ Port 3100 rather than the Next.js default of 3000, which is already taken on thi
 npm run check:env        # required env vars present (prints names, never values)
 npm run agent:verify     # opencv, mediapipe, scenedetect, ffmpeg, ADK all import/run
 npm run ping:gemini      # one round-trip to Gemini
-npm run ping:clickhouse  # SELECT 1
+npm run ping:clickhouse  # SELECT version()
+npm run db:clickhouse    # apply scenes / video_moments / moment_scores DDL
 npm run ping:agent       # Next.js API route -> ADK dev server
+npm run test:pipeline    # upload + identity + detect-scenes + direct (MOCK_GEMINI default) + MCP proof
+npm run test:e2e:install # one-time Chromium for Playwright
+npm run test:e2e         # browser + API E2E (needs E2E_AUTH=1 in .env; reuses :3100 if already up)
 npm run typecheck
 ```
+
+MCP Toolbox (optional for pipeline MCP proof): see [`mcp/toolbox/README.md`](mcp/toolbox/README.md).
+
+API docs while `npm run dev` is running: [http://localhost:3100/api/docs](http://localhost:3100/api/docs)
+
+## License
+
+Marryo source code is licensed under the [Apache License 2.0](LICENSE) (OSI-approved).
+
+Third-party assets keep their own terms (e.g. Mixkit Free License music, SIL OFL fonts).
+See `agent/assets/music/README.md` and `agent/assets/fonts/README.md`.
 
 ## Security
 

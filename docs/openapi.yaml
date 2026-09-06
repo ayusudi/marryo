@@ -1,0 +1,924 @@
+openapi: 3.0.3
+info:
+  title: Marryo API
+  version: "1.0.0"
+  description: |
+    Phase 6 backend — FFmpeg MP4 render from validated EDLs, post-render evaluation,
+    GCS delivery. Builds on Phase 5 Film Director (Gemini analysis, scoring, EDL).
+
+    Auth: none (local/hackathon). Do not expose publicly.
+
+    Storage URIs:
+      - GCS (default): `gs://{bucket}/projects/{project_id}/raw/{clip_id}.{ext}`
+      - Renders: `gs://{bucket}/projects/{project_id}/renders/{render_id}.mp4`
+      - Soundtracks: `gs://{bucket}/projects/{project_id}/soundtracks/{session_id}/{version_id}.mp4`
+      - Identity thumbs: `gs://{bucket}/projects/{project_id}/identity/{person_id}/thumb-N.jpg`
+      - Local escape hatch (`STORAGE_BACKEND=local`): `local:projects/...`
+
+    Signed reads use GCS V4 signed URLs (short TTL). Thumbnail HTTP route streams
+    bytes from storage (no public bucket objects).
+
+    Upload progress (poll `GET /status`): while transferring, `status=uploading` and
+    `current_stage=upload` ("Uploading footage"); after a successful clip batch,
+    `status=draft` and `current_stage=validated`.
+  contact:
+    name: Marryo
+servers:
+  - url: http://localhost:3100
+    description: Local Next.js API (port 3100)
+tags:
+  - name: health
+  - name: docs
+  - name: projects
+  - name: clips
+  - name: identity
+  - name: scenes
+  - name: director
+  - name: render
+  - name: soundtrack
+paths:
+  /api/health:
+    get:
+      tags: [health]
+      summary: Health + env subsystem presence
+      operationId: getHealth
+      responses:
+        "200":
+          description: Service is up (`phase` is 3)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  service: { type: string }
+                  phase: { type: integer, example: 6 }
+                  subsystems: { type: array, items: { type: object } }
+                  configured: { type: array, items: { type: string } }
+  /api/agent/ping:
+    get:
+      tags: [health]
+      summary: Ping ADK agent service
+      operationId: pingAgent
+      responses:
+        "200":
+          description: Agent reachable
+        "503":
+          description: Agent unreachable
+  /api/docs:
+    get:
+      tags: [docs]
+      summary: Swagger UI HTML
+      operationId: getSwaggerUi
+      responses:
+        "200":
+          description: Interactive Swagger UI
+          content:
+            text/html:
+              schema: { type: string }
+  /api/docs/openapi:
+    get:
+      tags: [docs]
+      summary: OpenAPI document (YAML)
+      operationId: getOpenApiYaml
+      responses:
+        "200":
+          description: OpenAPI 3 YAML from docs/openapi.yaml
+          content:
+            application/yaml:
+              schema: { type: string }
+  /api/projects:
+    post:
+      tags: [projects]
+      summary: Create a project
+      operationId: createProject
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateProjectRequest"
+            example:
+              couple_names:
+                - { name: Ada, role: bride }
+                - { name: Alan, role: groom }
+              wedding_date: "2026-09-15"
+              story: Met at a hackathon.
+              max_duration: 90
+              mood: warm
+              visual_tone: cinematic
+              ending_message: Forever starts here.
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+        "400":
+          description: Validation error
+  /api/projects/{id}:
+    get:
+      tags: [projects]
+      summary: Get project with clips
+      operationId: getProject
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+      responses:
+        "200":
+          description: Project + clips
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectWithClips"
+        "404":
+          description: Not found
+    patch:
+      tags: [projects]
+      summary: Update project creative settings
+      description: |
+        Currently supports `orientation`. Allowed anytime except while
+        `status=rendering` (in-flight render keeps its orientation snapshot).
+        Changing orientation does not invalidate the EDL.
+      operationId: updateProject
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateProjectRequest"
+            example:
+              orientation: portrait
+      responses:
+        "200":
+          description: Updated project
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+        "400":
+          description: Validation error
+        "404":
+          description: Not found
+        "409":
+          description: Render in progress
+  /api/projects/{id}/status:
+    get:
+      tags: [projects]
+      summary: Poll project status / stage
+      description: |
+        Reflects live DB fields. During multipart upload the API sets
+        `status=uploading` + `current_stage=upload`, then `validated` after
+        at least one clip succeeds.
+      operationId: getProjectStatus
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+      responses:
+        "200":
+          description: Status fields from DB
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectStatus"
+        "404":
+          description: Not found
+  /api/projects/{id}/upload:
+    post:
+      tags: [clips]
+      summary: Upload one or more video clips
+      description: |
+        Stores each file at `projects/{id}/raw/{clip_id}.{ext}` via StorageService
+        (GCS by default). Sets project to uploading/upload for the duration, then
+        validated when any clip succeeds. Returns 503 if storage is not configured.
+      operationId: uploadClips
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [files]
+              properties:
+                files:
+                  type: array
+                  items:
+                    type: string
+                    format: binary
+                  description: One or more mp4/mov/webm files (repeat the files field)
+      responses:
+        "200":
+          description: Per-file results (partial success allowed)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UploadResponse"
+        "400":
+          description: Bad request (quota, empty upload, etc.)
+        "404":
+          description: Project not found
+        "503":
+          description: Storage not configured (GCS missing and STORAGE_BACKEND≠local)
+  /api/projects/{id}/clips/{clipId}:
+    delete:
+      tags: [clips]
+      summary: Delete a clip
+      operationId: deleteClip
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+        - name: clipId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  clip_id: { type: string }
+        "404":
+          description: Project or clip not found
+  /api/projects/{id}/detect-scenes:
+    post:
+      tags: [scenes]
+      summary: Detect shot and scene boundaries across all valid clips
+      description: |
+        Runs PySceneDetect with ffmpeg and whole-clip fallback chains on all valid clips.
+        Writes deterministic scene rows (`scn_{clipId}_{n}`) to the ClickHouse `scenes` table,
+        and advances project status and stage to `analysing`.
+      operationId: detectScenes
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+      responses:
+        "200":
+          description: Scene detection results with per-clip boundaries and detector provenance
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DetectScenesResponse"
+        "400":
+          description: No valid clips to detect scenes
+        "404":
+          description: Project not found
+        "503":
+          description: Storage or ClickHouse not configured
+  /api/projects/{id}/direct:
+    post:
+      tags: [director]
+      summary: Run Film Director pipeline (analyze, score, plan, validate EDL)
+      description: |
+        Hybrid ADK orchestration: Gemini analyzes each detected scene, deterministic
+        scoring ranks moments, story framework guides narrative, plan_edit builds EDL,
+        validate_edl is a forced gate. Persists EditDecision when valid.
+        Advances project to `directing` / `directing` (or `failed` on validation error).
+        Call `POST /render` next to produce the MP4.
+      operationId: runFilmDirector
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+      responses:
+        "200":
+          description: Film Director result with EDL and top moments
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DirectorResponse"
+        "400":
+          description: No valid clips or scenes missing
+        "404":
+          description: Project not found
+        "500":
+          description: Orchestrator or Gemini failure
+  /api/projects/{id}/render:
+    post:
+      tags: [render]
+      summary: Render validated EDL to MP4 (landscape or portrait)
+      description: |
+        Loads the latest valid EditDecision, normalizes each scene (clip trim or
+        Pillow title/ending card), stitches with xfade (concat fallback), muxes a
+        silent AAC track, evaluates the output, and uploads to GCS under
+        `projects/{id}/renders/{renderId}.mp4`.
+
+        Canvas size follows `orientation`: landscape → 1920×1080, portrait → 1080×1920.
+        Resolution order: request body `orientation` → project.orientation → landscape.
+
+        On pass: `status=ready`, `current_stage=soundtrack` (choose music next).
+        On eval fail: MP4 still uploaded; `status=failed`, `current_stage=rendering`.
+      operationId: renderProject
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RenderRequest"
+            examples:
+              portraitOverride:
+                summary: Re-render as portrait without changing project default
+                value:
+                  orientation: portrait
+      responses:
+        "200":
+          description: Render result with evaluation and signed playback URL
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RenderResponse"
+        "404":
+          description: Project not found
+        "409":
+          description: No valid EditDecision — run /direct first
+        "503":
+          description: Storage not configured
+        "500":
+          description: FFmpeg or evaluation failure
+    get:
+      tags: [render]
+      summary: Latest render for a project
+      operationId: getLatestRender
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+      responses:
+        "200":
+          description: Latest render row
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RenderResponse"
+        "404":
+          description: No render found
+  /api/projects/{id}/render/{renderId}:
+    get:
+      tags: [render]
+      summary: Get a specific render by id
+      operationId: getRender
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+        - name: renderId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Render row
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RenderResponse"
+        "404":
+          description: Render not found
+  /api/projects/{id}/soundtrack:
+    post:
+      tags: [soundtrack]
+      summary: Generate five soundtrack video versions
+      description: |
+        Scores the Mixkit catalog against the film, remuxes the latest ready picture
+        render with each of the top 5 tracks (`-c:v copy`), and returns playback URLs
+        for side-by-side comparison. Reuses an existing ready session for the same
+        picture render unless `force=true`.
+      operationId: generateSoundtrack
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                force:
+                  type: boolean
+                  default: false
+                top_n:
+                  type: integer
+                  minimum: 1
+                  maximum: 10
+                  default: 5
+      responses:
+        "200":
+          description: Soundtrack session with version playback URLs
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SoundtrackSession"
+        "404":
+          description: Project not found
+        "409":
+          description: No ready picture render
+        "503":
+          description: Storage not configured
+        "500":
+          description: Scoring or remux failure
+    get:
+      tags: [soundtrack]
+      summary: Latest soundtrack session (for change-song UI)
+      operationId: getSoundtrack
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+      responses:
+        "200":
+          description: Session + versions
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SoundtrackSession"
+        "404":
+          description: No soundtrack session
+  /api/projects/{id}/soundtrack/select:
+    post:
+      tags: [soundtrack]
+      summary: Select a version, mute, or (later) original sound
+      description: |
+        Catalog selection reuses an already-remuxed version (no re-encode).
+        Advances `current_stage` to `grading` (before/after color grade). Modes: catalog, mute, original.
+      operationId: selectSoundtrack
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - type: object
+                  required: [mode, version_id]
+                  properties:
+                    mode:
+                      type: string
+                      enum: [catalog]
+                    version_id:
+                      type: string
+                - type: object
+                  required: [mode]
+                  properties:
+                    mode:
+                      type: string
+                      enum: [mute]
+                - type: object
+                  required: [mode]
+                  properties:
+                    mode:
+                      type: string
+                      enum: [original]
+            examples:
+              pickVersion:
+                value:
+                  mode: catalog
+                  version_id: stv_abc
+              mute:
+                value:
+                  mode: mute
+      responses:
+        "200":
+          description: Updated session with selection
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SoundtrackSession"
+        "404":
+          description: Session or version not found
+        "409":
+          description: No ready session / version not ready
+        "501":
+          description: Original sound not implemented yet
+  /api/projects/{id}/identify:
+    post:
+      tags: [identity]
+      summary: Cluster faces across valid clips into person identities
+      description: |
+        Optional step. Zero detections is allowed for later phases (continue without
+        bride/groom). Thumbnails are stored under `identity/{person_id}/`.
+      operationId: identifyProject
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+      responses:
+        "200":
+          description: Person clusters (may include warnings if fewer than 2 people)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IdentifyResponse"
+        "400":
+          description: No valid clips
+        "404":
+          description: Project not found
+  /api/projects/{id}/identity:
+    post:
+      tags: [identity]
+      summary: Confirm bride and/or groom person clusters
+      description: |
+        At least one of `bride_person_id` or `groom_person_id` is required.
+        Omit or set the other to `null` for single-subject projects.
+        Advances `current_stage` to `identity` even when only one role is set.
+      operationId: confirmIdentity
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConfirmIdentityRequest"
+            examples:
+              both:
+                summary: Bride and groom
+                value:
+                  bride_person_id: per_abc
+                  groom_person_id: per_def
+              brideOnly:
+                summary: Bride only (partner missing)
+                value:
+                  bride_person_id: per_abc
+      responses:
+        "200":
+          description: Mapping stored; unset role is null
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConfirmIdentityResponse"
+        "400":
+          description: Invalid person ids or neither role provided
+        "404":
+          description: Project not found
+  /api/projects/{id}/persons/{personId}/thumbnails/{index}:
+    get:
+      tags: [identity]
+      summary: Stream a person cluster thumbnail JPEG
+      description: |
+        Serves JPEG bytes for `thumbnail_uris[index]` from local or GCS storage
+        (private objects — not public URLs).
+      operationId: getPersonThumbnail
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+        - name: personId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: index
+          in: path
+          required: true
+          schema: { type: integer, minimum: 0 }
+          description: Zero-based index into the person's thumbnail_uris array
+      responses:
+        "200":
+          description: JPEG thumbnail bytes
+          content:
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+        "400":
+          description: Invalid index
+        "404":
+          description: Project, person, or thumbnail not found
+components:
+  parameters:
+    ProjectId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string }
+  schemas:
+    CoupleNameEntry:
+      type: object
+      required: [name, role]
+      properties:
+        name: { type: string, minLength: 1 }
+        role:
+          type: string
+          enum: [bride, groom]
+    CreateProjectRequest:
+      type: object
+      required: [couple_names]
+      properties:
+        couple_names:
+          type: array
+          minItems: 1
+          maxItems: 2
+          items:
+            $ref: "#/components/schemas/CoupleNameEntry"
+          description: Roles must be unique when both entries are present.
+        wedding_date: { type: string }
+        story: { type: string }
+        max_duration: { type: integer, minimum: 1, maximum: 600 }
+        mood: { type: string }
+        visual_tone: { type: string }
+        ending_message: { type: string }
+        orientation:
+          type: string
+          enum: [landscape, portrait]
+          default: landscape
+          description: Film format — landscape 1920×1080, portrait 1080×1920
+    UpdateProjectRequest:
+      type: object
+      properties:
+        orientation:
+          type: string
+          enum: [landscape, portrait]
+    Project:
+      type: object
+      properties:
+        project_id: { type: string }
+        owner_id: { type: string, nullable: true }
+        couple_names:
+          type: array
+          minItems: 1
+          maxItems: 2
+          items:
+            $ref: "#/components/schemas/CoupleNameEntry"
+        wedding_date: { type: string, nullable: true }
+        story: { type: string, nullable: true }
+        max_duration: { type: integer }
+        mood: { type: string, nullable: true }
+        visual_tone: { type: string, nullable: true }
+        ending_message: { type: string, nullable: true }
+        orientation:
+          type: string
+          enum: [landscape, portrait]
+          description: Default film format used when /render omits orientation
+        status:
+          type: string
+          description: Includes uploading during multipart transfer
+          enum: [draft, uploading, validating, analysing, directing, rendering, ready, failed]
+        current_stage:
+          type: string
+          description: upload while transferring; validated after successful clip batch
+          enum: [upload, validated, identifying, identity, analysing, directing, rendering, soundtrack, grading, complete]
+        bride_person_id: { type: string, nullable: true }
+        groom_person_id: { type: string, nullable: true }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    Clip:
+      type: object
+      properties:
+        clip_id: { type: string }
+        project_id: { type: string }
+        filename: { type: string }
+        storage_uri:
+          type: string
+          nullable: true
+          description: gs://… or local:… URI for the stored object
+        duration: { type: number, nullable: true }
+        uploaded_at: { type: string, format: date-time }
+        status: { type: string }
+        valid: { type: boolean, nullable: true }
+        validation_warnings:
+          type: object
+          nullable: true
+          properties:
+            warnings:
+              type: array
+              items: { type: string }
+            metrics:
+              type: object
+              properties:
+                brightness: { type: number }
+                blur: { type: number }
+                faceCount: { type: integer }
+    ProjectWithClips:
+      allOf:
+        - $ref: "#/components/schemas/Project"
+        - type: object
+          properties:
+            clips:
+              type: array
+              items:
+                $ref: "#/components/schemas/Clip"
+    ProjectStatus:
+      type: object
+      properties:
+        status: { type: string }
+        current_stage: { type: string }
+    UploadResponse:
+      type: object
+      properties:
+        project_id: { type: string }
+        clips:
+          type: array
+          items:
+            $ref: "#/components/schemas/Clip"
+        errors:
+          type: array
+          items:
+            type: object
+            properties:
+              filename: { type: string }
+              error: { type: string }
+    PersonCluster:
+      type: object
+      properties:
+        person_id: { type: string }
+        thumbnail_uris:
+          type: array
+          items: { type: string }
+          description: Opaque storage URIs (gs:// or local:); use the thumbnail HTTP route to view
+        clip_ids:
+          type: array
+          items: { type: string }
+        face_count: { type: integer }
+    IdentifyResponse:
+      type: object
+      properties:
+        persons:
+          type: array
+          items:
+            $ref: "#/components/schemas/PersonCluster"
+        warnings:
+          type: array
+          items: { type: string }
+          description: Includes couldnt_detect_two_distinct_people when fewer than 2 clusters
+    ConfirmIdentityRequest:
+      type: object
+      description: |
+        Provide at least one role. If both are set they must be different person ids.
+        Unset roles are cleared to null on the project.
+      properties:
+        bride_person_id: { type: string, nullable: true }
+        groom_person_id: { type: string, nullable: true }
+      anyOf:
+        - required: [bride_person_id]
+        - required: [groom_person_id]
+    ConfirmIdentityResponse:
+      type: object
+      properties:
+        project_id: { type: string }
+        bride_person_id: { type: string, nullable: true }
+        groom_person_id: { type: string, nullable: true }
+        current_stage: { type: string }
+    SceneSpan:
+      type: object
+      properties:
+        scene_id: { type: string }
+        start_time: { type: number }
+        end_time: { type: number }
+        duration: { type: number }
+    ClipScenes:
+      type: object
+      properties:
+        clip_id: { type: string }
+        filename: { type: string }
+        scene_count: { type: integer }
+        scenes:
+          type: array
+          items:
+            $ref: "#/components/schemas/SceneSpan"
+        detector:
+          type: string
+          enum: [pyscenedetect, ffmpeg, whole_clip]
+        warnings:
+          type: array
+          items: { type: string }
+    DetectScenesResponse:
+      type: object
+      properties:
+        project_id: { type: string }
+        clips:
+          type: array
+          items:
+            $ref: "#/components/schemas/ClipScenes"
+        total_scenes: { type: integer }
+    DirectorResponse:
+      type: object
+      properties:
+        project_id: { type: string }
+        edit_id: { type: string }
+        valid: { type: boolean }
+        issues:
+          type: array
+          items: { type: string }
+        moments_analyzed: { type: integer }
+        moments_scored: { type: integer }
+        theme: { type: string }
+        edl:
+          type: object
+          properties:
+            project_id: { type: string }
+            target_duration: { type: number }
+            scenes: { type: array, items: { type: object } }
+        top_moments: { type: array, items: { type: object } }
+        failed_scenes: { type: array, items: { type: object } }
+    RenderCheck:
+      type: object
+      properties:
+        name: { type: string }
+        passed: { type: boolean }
+        detail: { type: string }
+    RenderEvaluation:
+      type: object
+      properties:
+        passed: { type: boolean }
+        checks:
+          type: array
+          items:
+            $ref: "#/components/schemas/RenderCheck"
+        metrics:
+          type: object
+          properties:
+            duration: { type: number }
+            width: { type: integer }
+            height: { type: integer }
+            codec: { type: string }
+            audio_codec: { type: string, nullable: true }
+            expected_duration: { type: number }
+            scene_count_expected: { type: integer }
+            scene_count_rendered: { type: integer }
+    RenderRequest:
+      type: object
+      properties:
+        orientation:
+          type: string
+          enum: [landscape, portrait]
+          description: Optional override of project.orientation for this render only
+    RenderResponse:
+      type: object
+      properties:
+        render_id: { type: string }
+        project_id: { type: string }
+        edit_id: { type: string }
+        storage_uri: { type: string, nullable: true }
+        duration: { type: number, nullable: true }
+        width: { type: integer, nullable: true }
+        height: { type: integer, nullable: true }
+        orientation:
+          type: string
+          enum: [landscape, portrait]
+          description: Orientation snapshot used for this MP4
+        typography:
+          type: object
+          nullable: true
+          description: |
+            Scored typography decision (title + ending): font_family_id, layout,
+            colors, animation, score_breakdown, features_summary.
+          additionalProperties: true
+        status:
+          type: string
+          enum: [rendering, ready, failed]
+        evaluation:
+          allOf:
+            - $ref: "#/components/schemas/RenderEvaluation"
+          nullable: true
+        error_text: { type: string, nullable: true }
+        created_at: { type: string, format: date-time }
+        playback_url:
+          type: string
+          nullable: true
+          description: Short-TTL signed URL (gs://) or file:// for local storage
+    SoundtrackVersion:
+      type: object
+      properties:
+        version_id: { type: string }
+        rank: { type: integer }
+        track_id: { type: string }
+        title: { type: string }
+        artist: { type: string, nullable: true }
+        score: { type: number, nullable: true }
+        tags:
+          type: array
+          items: { type: string }
+        status:
+          type: string
+          enum: [pending, ready, failed]
+        storage_uri: { type: string, nullable: true }
+        playback_url: { type: string, nullable: true }
+        error_text: { type: string, nullable: true }
+    SoundtrackSession:
+      type: object
+      properties:
+        session_id: { type: string }
+        project_id: { type: string }
+        picture_render_id: { type: string }
+        status:
+          type: string
+          enum: [generating, ready, failed]
+        selected_version_id: { type: string, nullable: true }
+        selected_mode:
+          type: string
+          nullable: true
+          enum: [catalog, mute, original]
+        recommendations:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        versions:
+          type: array
+          items:
+            $ref: "#/components/schemas/SoundtrackVersion"
+        modes:
+          type: array
+          items:
+            type: object
+            properties:
+              mode: { type: string, enum: [mute, original] }
+              label: { type: string }
+              available: { type: boolean }
+        error_text: { type: string, nullable: true }
+        created_at: { type: string, format: date-time }

@@ -20,7 +20,7 @@ const nextConfig: NextConfig = {
   // @marryo/services ships TypeScript source, so Next has to compile it.
   transpilePackages: ["@marryo/services"],
   outputFileTracingRoot: repoRoot,
-  serverExternalPackages: ["@clickhouse/client", "@google-cloud/storage"],
+  serverExternalPackages: ["@clickhouse/client", "@google-cloud/storage", "@prisma/client", "prisma"],
 };
 
 export default nextConfig;

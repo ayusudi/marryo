@@ -8,8 +8,23 @@
     "./agent": "./src/agent.ts",
     "./env": "./src/env.ts",
     "./clickhouse": "./src/clickhouse.ts",
+    "./clickhouse-schema": "./src/clickhouse-schema.ts",
     "./storage": "./src/storage.ts",
-    "./projects": "./src/projects.ts"
+    "./mcp-toolbox": "./src/mcp-toolbox.ts",
+    "./storage-service": "./src/storage-service.ts",
+    "./projects": "./src/projects.ts",
+    "./identity": "./src/identity.ts",
+    "./scenes": "./src/scenes.ts",
+    "./film-director": "./src/film-director.ts",
+    "./tech-validation": "./src/tech-validation.ts",
+    "./visual-validation": "./src/visual-validation.ts",
+    "./render": "./src/render.ts",
+    "./render-eval": "./src/render-eval.ts",
+    "./soundtrack": "./src/soundtrack.ts",
+    "./films": "./src/films.ts",
+    "./clip-media": "./src/clip-media.ts",
+    "./account": "./src/account.ts",
+    "./db": "./src/db.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"
@@ -17,10 +32,12 @@
   "dependencies": {
     "@clickhouse/client": "^1.23.1",
     "@google-cloud/storage": "^8.0.1",
+    "@prisma/client": "^6.16.2",
     "zod": "^4.5.4"
   },
   "devDependencies": {
     "@types/node": "^24.10.1",
+    "prisma": "^6.16.2",
     "typescript": "^5.9.3"
   }
 }

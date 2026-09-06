@@ -1,0 +1,44 @@
+{
+  "romantic": {
+    "couple_both": 30,
+    "couple_one": 15,
+    "couple_none": 0,
+    "emotion_match": 15,
+    "emotions_positive": ["romantic", "joy", "joyful", "tender", "happy", "love"],
+    "visual_quality": { "high": 15, "medium": 8, "low": 0 },
+    "lighting_match": 10,
+    "lightings_positive": ["golden_hour", "soft", "warm"],
+    "shot_bonus": { "close_up": 5, "medium": 3, "wide": 2 },
+    "duration_sweet_spot": { "min": 2.0, "max": 8.0, "bonus": 5 },
+    "other_people_penalty": -10,
+    "max_score": 100
+  },
+  "cinematic": {
+    "couple_both": 20,
+    "couple_one": 10,
+    "couple_none": 0,
+    "emotion_match": 10,
+    "emotions_positive": ["calm", "tender", "romantic", "awe"],
+    "visual_quality": { "high": 20, "medium": 10, "low": 0 },
+    "lighting_match": 15,
+    "lightings_positive": ["golden_hour", "daylight", "dramatic"],
+    "shot_bonus": { "wide": 10, "medium": 5, "close_up": 3, "drone": 8 },
+    "duration_sweet_spot": { "min": 3.0, "max": 10.0, "bonus": 5 },
+    "other_people_penalty": -5,
+    "max_score": 100
+  },
+  "fun": {
+    "couple_both": 25,
+    "couple_one": 12,
+    "couple_none": 0,
+    "emotion_match": 20,
+    "emotions_positive": ["joy", "joyful", "happy", "playful", "excited"],
+    "visual_quality": { "high": 10, "medium": 8, "low": 3 },
+    "lighting_match": 5,
+    "lightings_positive": ["daylight", "bright", "outdoor"],
+    "shot_bonus": { "medium": 8, "wide": 5, "close_up": 3 },
+    "duration_sweet_spot": { "min": 1.5, "max": 6.0, "bonus": 5 },
+    "other_people_penalty": -5,
+    "max_score": 100
+  }
+}

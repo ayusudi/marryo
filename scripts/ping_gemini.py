@@ -16,6 +16,13 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 load_dotenv(REPO_ROOT / "agent" / ".env")
 load_dotenv(REPO_ROOT / ".env")
 
+_creds = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", "").strip()
+if _creds and not os.path.isabs(_creds):
+    for candidate in (REPO_ROOT / _creds, REPO_ROOT / Path(_creds).name):
+        if candidate.is_file():
+            os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = str(candidate.resolve())
+            break
+
 MODEL = os.environ.get("MARRYO_MODEL", "gemini-2.5-flash")
 PROMPT = "Reply with exactly: Marryo is online."
 

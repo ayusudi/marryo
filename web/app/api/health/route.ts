@@ -8,7 +8,7 @@ export function GET() {
   return Response.json({
     ok: true,
     service: "marryo-web",
-    phase: 0,
+    phase: 6,
     // Variable names only - values are never returned over HTTP.
     subsystems,
     configured: subsystems.filter((s) => s.configured).map((s) => s.subsystem),

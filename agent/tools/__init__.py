@@ -1,10 +1,17 @@
-"""ADK tool functions for the Marryo Film Director.
+"""ADK tool registrations for the Film Director."""
 
-One tool per module. Each module exposes a plain Python function with a typed signature
-and a docstring, which is what ADK turns into the tool schema the model sees. Import them
-here and add them to `root_agent.tools` in marryo_agent/agent.py.
+from tools.analyze_clip import analyze_clip
+from tools.generate_story import generate_story_tool as generate_story
+from tools.plan_edit import plan_edit_tool as plan_edit
+from tools.query_candidate_moments import query_candidate_moments_tool as query_candidate_moments
+from tools.score_moments import score_moments
+from tools.validate_edl import validate_edl_tool as validate_edl
 
-Empty in Phase 0.
-"""
-
-__all__: list[str] = []
+__all__ = [
+    "analyze_clip",
+    "score_moments",
+    "query_candidate_moments",
+    "generate_story",
+    "plan_edit",
+    "validate_edl",
+]

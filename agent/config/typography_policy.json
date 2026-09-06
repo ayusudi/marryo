@@ -1,0 +1,154 @@
+{
+  "families": {
+    "serif_editorial": {
+      "file": "PlayfairDisplay-Regular.ttf",
+      "label": "Playfair Display",
+      "license": "OFL"
+    },
+    "sans_clean": {
+      "file": "Inter-Regular.ttf",
+      "label": "Inter",
+      "license": "OFL"
+    },
+    "script_soft": {
+      "file": "GreatVibes-Regular.ttf",
+      "label": "Great Vibes",
+      "license": "OFL"
+    },
+    "display_bold": {
+      "file": "Montserrat-Bold.ttf",
+      "label": "Montserrat Bold",
+      "license": "OFL"
+    }
+  },
+  "layouts": ["center_stack", "lower_third", "upper_third", "portrait_hero"],
+  "animations": ["none", "fade_in", "rise_fade", "scale_in"],
+  "weights": {
+    "emotion_affinity": 25,
+    "mood_affinity": 20,
+    "tone_layout": 15,
+    "orientation_layout": 15,
+    "palette_contrast": 15,
+    "tempo_animation": 10
+  },
+  "theme_family_affinity": {
+    "romantic": {
+      "serif_editorial": 1.0,
+      "script_soft": 0.75,
+      "sans_clean": 0.35,
+      "display_bold": 0.15
+    },
+    "cinematic": {
+      "serif_editorial": 0.7,
+      "sans_clean": 0.85,
+      "script_soft": 0.25,
+      "display_bold": 0.3
+    },
+    "fun": {
+      "display_bold": 1.0,
+      "sans_clean": 0.7,
+      "serif_editorial": 0.25,
+      "script_soft": 0.2
+    }
+  },
+  "mood_family_affinity": {
+    "warm": {
+      "serif_editorial": 1.0,
+      "script_soft": 0.7,
+      "sans_clean": 0.4,
+      "display_bold": 0.2
+    },
+    "romantic": {
+      "serif_editorial": 0.95,
+      "script_soft": 0.85,
+      "sans_clean": 0.35,
+      "display_bold": 0.15
+    },
+    "cool": {
+      "sans_clean": 1.0,
+      "serif_editorial": 0.45,
+      "display_bold": 0.35,
+      "script_soft": 0.15
+    },
+    "neutral": {
+      "sans_clean": 0.9,
+      "serif_editorial": 0.55,
+      "display_bold": 0.4,
+      "script_soft": 0.25
+    }
+  },
+  "emotion_family_affinity": {
+    "tender": { "serif_editorial": 0.9, "script_soft": 0.8, "sans_clean": 0.3 },
+    "romantic": { "serif_editorial": 0.95, "script_soft": 0.75 },
+    "joy": { "display_bold": 0.9, "sans_clean": 0.6, "script_soft": 0.2 },
+    "joyful": { "display_bold": 0.9, "sans_clean": 0.6 },
+    "happy": { "display_bold": 0.8, "sans_clean": 0.65 },
+    "playful": { "display_bold": 1.0, "sans_clean": 0.5 },
+    "calm": { "sans_clean": 0.85, "serif_editorial": 0.7 },
+    "love": { "script_soft": 0.85, "serif_editorial": 0.9 }
+  },
+  "tone_layout_affinity": {
+    "cinematic": {
+      "lower_third": 1.0,
+      "upper_third": 0.55,
+      "center_stack": 0.45,
+      "portrait_hero": 0.5
+    },
+    "natural": {
+      "center_stack": 1.0,
+      "portrait_hero": 0.7,
+      "lower_third": 0.4,
+      "upper_third": 0.4
+    },
+    "bright": {
+      "center_stack": 0.85,
+      "upper_third": 0.7,
+      "portrait_hero": 0.65,
+      "lower_third": 0.35
+    }
+  },
+  "orientation_layout_affinity": {
+    "landscape": {
+      "center_stack": 0.9,
+      "lower_third": 0.85,
+      "upper_third": 0.6,
+      "portrait_hero": 0.25
+    },
+    "portrait": {
+      "portrait_hero": 1.0,
+      "center_stack": 0.75,
+      "upper_third": 0.55,
+      "lower_third": 0.15
+    }
+  },
+  "tempo_animation_affinity": {
+    "slow": { "fade_in": 1.0, "none": 0.7, "rise_fade": 0.45, "scale_in": 0.3 },
+    "medium": { "rise_fade": 1.0, "fade_in": 0.75, "scale_in": 0.55, "none": 0.4 },
+    "fast": { "scale_in": 1.0, "rise_fade": 0.65, "fade_in": 0.4, "none": 0.25 }
+  },
+  "penalties": {
+    "script_long_name": -40,
+    "script_non_latin": -50,
+    "lower_third_on_portrait": -25,
+    "portrait_hero_on_landscape": -15,
+    "script_on_fun_theme": -20
+  },
+  "constraints": {
+    "script_max_name_chars": 28,
+    "margin_landscape": 0.12,
+    "margin_portrait": 0.1,
+    "subline_size_ratio": 0.4,
+    "min_name_size": 28,
+    "max_name_size_landscape": 96,
+    "max_name_size_portrait": 72,
+    "min_contrast_ratio": 4.5,
+    "animation_duration_cap": 0.8,
+    "animation_duration_frac": 0.35
+  },
+  "tracking": {
+    "serif_editorial": 0.04,
+    "sans_clean": 0.06,
+    "script_soft": 0.02,
+    "display_bold": 0.08
+  }
+}

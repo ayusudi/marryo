@@ -57,7 +57,21 @@ const envSchema = z.object({
   AGENT_SERVICE_URL: withDefault("http://127.0.0.1:8000"),
 
   MAX_CLIP_SIZE_MB: positiveInt(500),
-  MAX_CLIPS_PER_PROJECT: positiveInt(30),
+  MAX_CLIPS_PER_PROJECT: positiveInt(6),
+
+  DATABASE_URL: withDefault("file:dev.db"),
+  UPLOADS_DIR: withDefault("./uploads"),
+  PYTHON_BIN: withDefault("./agent/.venv/bin/python"),
+  /** `gcs` (default when bucket configured) or `local` for offline demos. */
+  STORAGE_BACKEND: withDefault("gcs"),
+  MCP_TOOLBOX_URL: withDefault("http://127.0.0.1:5001"),
+
+  FFMPEG_BIN: withDefault("ffmpeg"),
+  RENDER_WIDTH: positiveInt(1920),
+  RENDER_HEIGHT: positiveInt(1080),
+  RENDER_FPS: positiveInt(30),
+  RENDER_CRF: positiveInt(23),
+  RENDER_PRESET: withDefault("ultrafast"),
 });
 
 export type Env = z.infer<typeof envSchema>;

@@ -1,0 +1,19 @@
+{
+  "beats": [
+    { "name": "Opening", "description": "Establish the mood and setting", "min_score": 0 },
+    { "name": "Bride introduction", "description": "Introduce the bride", "requires": "bride_present", "min_score": 30 },
+    { "name": "Groom introduction", "description": "Introduce the groom", "requires": "groom_present", "min_score": 30 },
+    { "name": "First couple moment", "description": "First shared moment together", "requires": "couple_both", "min_score": 40 },
+    { "name": "Relationship montage", "description": "Montage of couple moments", "min_score": 20 },
+    { "name": "Emotional section", "description": "Tender, emotional beats", "min_score": 35 },
+    { "name": "Couple highlight", "description": "Peak couple moment", "requires": "couple_both", "min_score": 50 },
+    { "name": "Climax", "description": "Most powerful visual moment", "min_score": 45 },
+    { "name": "Names and date", "description": "Couple names and wedding date", "type": "title_card" },
+    { "name": "Ending", "description": "Closing with ending message", "type": "ending_card" }
+  ],
+  "duration_scaling": {
+    "short": { "max_seconds": 45, "beat_indices": [0, 4, 8, 9] },
+    "medium": { "max_seconds": 90, "beat_indices": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9] },
+    "long": { "max_seconds": 999, "beat_indices": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9] }
+  }
+}

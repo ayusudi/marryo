@@ -1,0 +1,12 @@
+{
+  "Opening": { "emotion": "%", "shot_type": "wide", "lighting": "%" },
+  "Bride introduction": { "emotion": "%", "shot_type": "%", "lighting": "%", "bride_present": true },
+  "Groom introduction": { "emotion": "%", "shot_type": "%", "lighting": "%", "groom_present": true },
+  "First couple moment": { "emotion": "romantic", "shot_type": "%", "lighting": "%" },
+  "Relationship montage": { "emotion": "%", "shot_type": "%", "lighting": "%" },
+  "Emotional section": { "emotion": "tender", "shot_type": "close_up", "lighting": "%" },
+  "Couple highlight": { "emotion": "romantic", "shot_type": "%", "lighting": "golden_hour" },
+  "Climax": { "emotion": "%", "shot_type": "wide", "lighting": "%" },
+  "Names and date": { "emotion": "%", "shot_type": "%", "lighting": "%" },
+  "Ending": { "emotion": "%", "shot_type": "%", "lighting": "%" }
+}

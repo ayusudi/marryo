@@ -21,11 +21,13 @@ __pycache__/
 *.egg-info/
 .pytest_cache/
 .ruff_cache/
+agent/marryo_agent/.adk/
 
 # env + credentials - never commit
 .env
 .env.*
 !.env.example
+!**/.env.example
 *-service-account*.json
 *credentials*.json
 gcp-key*.json
@@ -33,14 +35,34 @@ gcp-key*.json
 # media / working files
 media/
 tmp/
+uploads/
 *.mp4
 *.mov
+*.webm
+*.mp3
+*.m4a
+*.wav
 *.MP4
 *.MOV
+*.WEBM
+*.MP3
+*.M4A
+*.WAV
+!scripts/sample-clips/**
+!agent/assets/music/**
 
-# os / editor
-.DS_Store
-*.log
-.vscode/
-.idea/
+# local sqlite (Prisma)
+*.db
+*.db-journal
+!clickhouse/
+
+# playwright / local tooling
+e2e-report/
+e2e-results/
+test-results/
+playwright-report/
+toolbox
+
+# editor / agent local
 .cursor/
+.DS_Store

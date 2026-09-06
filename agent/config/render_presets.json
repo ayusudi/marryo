@@ -1,0 +1,43 @@
+{
+  "tones": {
+    "cinematic": {
+      "vf": "eq=contrast=1.06:saturation=0.95,curves=preset=medium_contrast"
+    },
+    "natural": {
+      "vf": ""
+    },
+    "bright": {
+      "vf": "eq=brightness=0.03:contrast=1.04:saturation=1.05"
+    }
+  },
+  "moods": {
+    "warm": {
+      "vf": "colorbalance=rs=0.03:gs=0.01:bs=-0.03",
+      "card_bg": "#1a1410",
+      "card_fg": "#f5e9dc"
+    },
+    "romantic": {
+      "vf": "colorbalance=rs=0.04:gs=0.0:bs=-0.02",
+      "card_bg": "#1c1218",
+      "card_fg": "#f7e8ef"
+    },
+    "cool": {
+      "vf": "colorbalance=rs=-0.02:gs=0.0:bs=0.03",
+      "card_bg": "#10141a",
+      "card_fg": "#e8eef5"
+    },
+    "neutral": {
+      "vf": "",
+      "card_bg": "#111111",
+      "card_fg": "#f0f0f0"
+    }
+  },
+  "defaults": {
+    "card_bg": "#111111",
+    "card_fg": "#f0f0f0"
+  },
+  "transition": {
+    "type": "fade",
+    "duration": 0.5
+  }
+}
