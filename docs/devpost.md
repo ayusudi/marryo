@@ -148,6 +148,15 @@ Example outcome from a warm / cinematic brief: ~26s cut against a 30s target, en
 
 ---
 
+## Team / contributors
+
+| Name | Role | Links |
+|------|------|--------|
+| **Ayu Sudi Dwijayanti** | Co-builder | [GitHub](https://github.com/ayusudi) · [LinkedIn](https://www.linkedin.com/in/ayusudi/) |
+| **Muhammad Fauzan** | Co-builder | [GitHub](https://github.com/mfzn) · [LinkedIn](https://www.linkedin.com/in/muhammad-fauzan-8b936a186/) |
+
+---
+
 ## Diagram index
 
 | File | Description |
