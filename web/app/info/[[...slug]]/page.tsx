@@ -2,8 +2,10 @@ import { redirect } from "next/navigation";
 
 const MAP: Record<string, string> = {
   about: "/#about",
+  tutorial: "/#tutorial",
   terms: "/#terms",
   privacy: "/#privacy",
+  pipeline: "/#pipeline",
   tech: "/#tech",
 };
 

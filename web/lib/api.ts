@@ -20,6 +20,7 @@ export type ApiProject = {
   bride_person_id: string | null;
   groom_person_id: string | null;
   session_ended_at?: string | null;
+  created_at: string;
   clips?: ApiClip[];
 };
 

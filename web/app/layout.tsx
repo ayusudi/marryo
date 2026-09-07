@@ -18,9 +18,9 @@ const sourceSans = Source_Sans_3({
 });
 
 export const metadata: Metadata = {
-  title: "Marryo — Your memories, as a film",
+  title: "Marryo — Your memories, as a short film",
   description:
-    "Your memories already contain the story. Marryo turns them into a film.",
+    "Your memories already contain the story. Marryo turns them into a short film.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

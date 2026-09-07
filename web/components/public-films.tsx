@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-import { isInfoHash } from "@/components/home-info";
+import { isInfoSectionHash } from "@/components/home-info";
 
 type PublicFilm = {
   film_id: string;
@@ -20,7 +20,7 @@ function useInfoHashOpen() {
   useEffect(() => {
     const sync = () => {
       const raw = window.location.hash.replace(/^#/, "");
-      setOpen(isInfoHash(raw));
+      setOpen(isInfoSectionHash(raw));
     };
     sync();
     window.addEventListener("hashchange", sync);
@@ -90,7 +90,7 @@ function FilmCard({
               />
             ) : (
               <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-[#2a241c] to-[#12100e] text-sm text-ivory/40">
-                {film.track_title || "Film"}
+                {film.track_title || "Short film"}
               </div>
             )}
             <span className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent" />
@@ -106,7 +106,7 @@ function FilmCard({
       </div>
       <div>
         <p className="font-display text-lg text-ivory">
-          {film.track_title || film.title || "Wedding film"}
+          {film.track_title || film.title || "Wedding short film"}
         </p>
         {film.couple_label ? (
           <p className="text-sm text-ivory/50">{film.couple_label}</p>
@@ -169,9 +169,9 @@ export function PublicFilmsGallery() {
       <div className="mx-auto max-w-6xl">
         <div className="flex flex-wrap items-end justify-between gap-6">
           <div>
-            <p className="text-xs tracking-[0.2em] text-ivory/45 uppercase">Featured films</p>
+            <p className="text-xs tracking-[0.2em] text-ivory/45 uppercase">Featured short films</p>
             <h2 className="font-display mt-3 max-w-xl text-3xl tracking-[-0.02em] text-balance sm:text-4xl">
-              Films made from real weddings.
+              Short films made from real weddings.
             </h2>
           </div>
           {canSlide ? (
