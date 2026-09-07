@@ -66,3 +66,4 @@ toolbox
 # editor / agent local
 .cursor/
 .DS_Store
+deploy/env.cloud.local

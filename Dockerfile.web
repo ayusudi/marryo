@@ -1,0 +1,102 @@
+# Context: repo root. Build: docker build -f Dockerfile.web -t marryo-web .
+#
+# Fat image: Next.js + Python agent CLIs + FFmpeg/OpenCV.
+# Identity, scenes, Direct, render, and soundtrack spawn Python/FFmpeg from Node.
+#
+# Runner is python:3.13 so the venv interpreter exists (copying a venv from a
+# python image onto node:slim leaves bin/python → ENOENT).
+
+FROM node:22-bookworm AS deps
+WORKDIR /app
+COPY package.json package-lock.json ./
+COPY web/package.json web/
+COPY services/package.json services/
+COPY prisma ./prisma
+RUN npm ci
+
+FROM node:22-bookworm AS builder
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
+COPY package.json package-lock.json tsconfig.base.json ./
+COPY web ./web
+COPY services ./services
+COPY prisma ./prisma
+ENV NEXT_TELEMETRY_DISABLED=1
+ENV DATABASE_URL=postgresql://marryo:marryo@127.0.0.1:5432/marryo
+RUN npx prisma generate --schema prisma/schema.prisma \
+  && npm run build --workspace web
+
+FROM python:3.13-slim-bookworm AS python-deps
+WORKDIR /opt/agent
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    ffmpeg \
+    libgl1 \
+    libglib2.0-0 \
+    libsm6 \
+    libxext6 \
+    libxrender1 \
+  && rm -rf /var/lib/apt/lists/*
+COPY agent/requirements.txt agent/pyproject.toml ./
+COPY agent/marryo_agent ./marryo_agent
+COPY agent/tools ./tools
+COPY agent/cv ./cv
+COPY agent/config ./config
+COPY agent/assets ./assets
+RUN python -m venv /opt/agent/.venv \
+  && /opt/agent/.venv/bin/pip install --no-cache-dir -U pip \
+  && /opt/agent/.venv/bin/pip install --no-cache-dir -r requirements.txt \
+  && /opt/agent/.venv/bin/pip install --no-cache-dir -e .
+
+FROM python:3.13-slim-bookworm AS runner
+WORKDIR /app
+ARG NODE_VERSION=22.18.0
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+ENV PORT=8080
+ENV HOSTNAME=0.0.0.0
+ENV PYTHON_BIN=/opt/agent/.venv/bin/python
+ENV FFMPEG_BIN=ffmpeg
+ENV PATH="/opt/agent/.venv/bin:/usr/local/bin:${PATH}"
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    curl \
+    ffmpeg \
+    libgl1 \
+    libglib2.0-0 \
+    libsm6 \
+    libxext6 \
+    libxrender1 \
+    openssl \
+    xz-utils \
+  && ARCH="$(dpkg --print-architecture)" \
+  && case "$ARCH" in \
+       amd64) NODE_ARCH=x64 ;; \
+       arm64) NODE_ARCH=arm64 ;; \
+       *) echo "unsupported arch: $ARCH" >&2; exit 1 ;; \
+     esac \
+  && curl -fsSL "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-${NODE_ARCH}.tar.xz" \
+       | tar -xJ -C /usr/local --strip-components=1 \
+  && rm -rf /var/lib/apt/lists/* \
+  && groupadd -r marryo && useradd -r -g marryo marryo
+
+COPY --from=builder /app/web/.next/standalone ./
+COPY --from=builder /app/web/.next/static ./web/.next/static
+COPY --from=builder /app/web/public ./web/public
+COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
+COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
+COPY --from=python-deps /opt/agent /opt/agent
+COPY agent /app/agent
+RUN rm -rf /app/agent/.venv && ln -s /opt/agent/.venv /app/agent/.venv \
+  && mkdir -p /app/tmp /app/uploads \
+  && chown -R marryo:marryo /app /opt/agent \
+  && test -x /opt/agent/.venv/bin/python \
+  && /opt/agent/.venv/bin/python -c "import cv2, sys; print('python', sys.version.split()[0], 'cv2', cv2.__version__)"
+
+COPY deploy/web-entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
+
+USER marryo
+EXPOSE 8080
+CMD ["/app/entrypoint.sh"]

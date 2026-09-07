@@ -276,6 +276,138 @@ function uploadOneClipWithProgress(
   },
   onProgress?: (progress: UploadProgress) => void,
 ): Promise<{ clip?: ApiClip; error?: { filename: string; error: string } }> {
+  // Prefer browser→GCS signed PUT (Cloud Run rejects bodies > ~32MB with 413).
+  return uploadOneClipViaGcs(id, file, meta, onProgress).catch((error) => {
+    const msg = error instanceof Error ? error.message : String(error);
+    // Fall back to multipart only when direct upload is unavailable (local backend).
+    if (/STORAGE_BACKEND=local|signed uploads not supported|501/i.test(msg)) {
+      return uploadOneClipMultipart(id, file, meta, onProgress);
+    }
+    return { error: { filename: file.name, error: msg } };
+  });
+}
+
+async function uploadOneClipViaGcs(
+  id: string,
+  file: File,
+  meta: {
+    fileIndex: number;
+    fileCount: number;
+    fileName: string;
+    loadedBase: number;
+    totalBytes: number;
+  },
+  onProgress?: (progress: UploadProgress) => void,
+): Promise<{ clip?: ApiClip; error?: { filename: string; error: string } }> {
+  const initRes = await fetch(`/api/projects/${id}/upload/init`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      filename: file.name,
+      contentType: file.type || "video/mp4",
+      size: file.size,
+    }),
+  });
+  const initBody = (await initRes.json().catch(() => ({}))) as {
+    error?: string;
+    clip_id?: string;
+    storage_uri?: string;
+    upload_url?: string;
+    content_type?: string;
+  };
+  if (initRes.status === 501) {
+    throw new Error(initBody.error || "501");
+  }
+  if (!initRes.ok || !initBody.upload_url || !initBody.clip_id || !initBody.storage_uri) {
+    return {
+      error: {
+        filename: file.name,
+        error: initBody.error || `upload init failed (${initRes.status})`,
+      },
+    };
+  }
+
+  await new Promise<void>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.upload.onprogress = (event) => {
+      if (!event.lengthComputable) return;
+      const loaded = meta.loadedBase + event.loaded;
+      const percent = Math.min(99, Math.round((loaded / meta.totalBytes) * 100));
+      onProgress?.({
+        phase: "upload",
+        percent,
+        loadedBytes: loaded,
+        totalBytes: meta.totalBytes,
+        fileCount: meta.fileCount,
+        fileIndex: meta.fileIndex,
+        fileName: meta.fileName,
+      });
+    };
+    xhr.onload = () => {
+      if (xhr.status < 200 || xhr.status >= 300) {
+        reject(new Error(`GCS upload failed (${xhr.status})`));
+        return;
+      }
+      resolve();
+    };
+    xhr.onerror = () => reject(new Error("network error during GCS upload"));
+    xhr.open("PUT", initBody.upload_url!);
+    xhr.setRequestHeader("Content-Type", initBody.content_type || file.type || "video/mp4");
+    xhr.send(file);
+  });
+
+  onProgress?.({
+    phase: "validate",
+    percent: null,
+    loadedBytes: meta.loadedBase + file.size,
+    totalBytes: meta.totalBytes,
+    fileCount: meta.fileCount,
+    fileIndex: meta.fileIndex,
+    fileName: meta.fileName,
+  });
+
+  const completeRes = await fetch(`/api/projects/${id}/upload/complete`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      clip_id: initBody.clip_id,
+      filename: file.name,
+      storage_uri: initBody.storage_uri,
+    }),
+  });
+  const completeBody = (await completeRes.json().catch(() => ({}))) as {
+    error?: string;
+    clips?: ApiClip[];
+    errors?: Array<{ filename: string; error: string }>;
+  };
+  if (!completeRes.ok) {
+    return {
+      error: {
+        filename: file.name,
+        error: completeBody.error || `upload complete failed (${completeRes.status})`,
+      },
+    };
+  }
+  const clip = completeBody.clips?.[0];
+  const err = completeBody.errors?.[0];
+  return {
+    clip,
+    error: err ?? (clip ? undefined : { filename: file.name, error: "upload returned no clip" }),
+  };
+}
+
+function uploadOneClipMultipart(
+  id: string,
+  file: File,
+  meta: {
+    fileIndex: number;
+    fileCount: number;
+    fileName: string;
+    loadedBase: number;
+    totalBytes: number;
+  },
+  onProgress?: (progress: UploadProgress) => void,
+): Promise<{ clip?: ApiClip; error?: { filename: string; error: string } }> {
   const form = new FormData();
   form.append("files", file);
 
@@ -321,7 +453,6 @@ function uploadOneClipWithProgress(
           body && typeof body === "object" && body !== null && "error" in body
             ? String((body as { error: unknown }).error)
             : `upload failed (${xhr.status})`;
-        // Per-file failure should not abort the whole batch.
         resolve({ error: { filename: file.name, error: msg } });
         return;
       }

@@ -59,7 +59,7 @@ const envSchema = z.object({
   MAX_CLIP_SIZE_MB: positiveInt(500),
   MAX_CLIPS_PER_PROJECT: positiveInt(6),
 
-  DATABASE_URL: withDefault("file:dev.db"),
+  DATABASE_URL: withDefault("postgresql://marryo:marryo@127.0.0.1:5432/marryo"),
   UPLOADS_DIR: withDefault("./uploads"),
   PYTHON_BIN: withDefault("./agent/.venv/bin/python"),
   /** `gcs` (default when bucket configured) or `local` for offline demos. */

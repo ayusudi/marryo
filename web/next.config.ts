@@ -17,6 +17,8 @@ const repoRoot =
 loadEnvConfig(repoRoot, process.env.NODE_ENV !== "production", console, true);
 
 const nextConfig: NextConfig = {
+  // Standalone output for Cloud Run / Docker (see Dockerfile.web).
+  output: "standalone",
   // @marryo/services ships TypeScript source, so Next has to compile it.
   transpilePackages: ["@marryo/services"],
   outputFileTracingRoot: repoRoot,

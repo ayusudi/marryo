@@ -1,17 +1,21 @@
 import Link from "next/link";
 import { Suspense } from "react";
 
-import { googleAuthConfigured } from "@/auth";
+import { isGoogleAuthConfigured } from "@/auth";
 import { BeginFilmCta, SignInPromptGate } from "@/components/begin-film-server";
 import { HomeHashLink, HomeInfoFooterLinks, HomeInfoSection } from "@/components/home-info";
 import { LandingNav } from "@/components/landing-nav";
 import { PublicFilmsGallery } from "@/components/public-films";
+
+/** Secrets (AUTH_GOOGLE_*) exist only at Cloud Run runtime — never bake at build. */
+export const dynamic = "force-dynamic";
 
 /** Wedding atmosphere only — florals / venue, no faces. */
 const HERO_IMAGE =
   "https://images.unsplash.com/photo-1519225421980-715cb0215aed?auto=format&fit=crop&w=2400&q=80";
 
 export default function LandingPage() {
+  const googleConfigured = isGoogleAuthConfigured();
   return (
     <main className="bg-film text-ivory">
       <Suspense fallback={null}>
@@ -81,7 +85,7 @@ export default function LandingPage() {
 
       <PublicFilmsGallery />
 
-      <HomeInfoSection googleConfigured={googleAuthConfigured} />
+      <HomeInfoSection googleConfigured={googleConfigured} />
 
       <footer className="border-t border-ivory/10 bg-film px-6 py-10 sm:px-10">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 text-sm text-ivory/45">

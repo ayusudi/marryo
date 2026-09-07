@@ -83,7 +83,7 @@ function coupleLabelFromJson(coupleNamesJson: string): string | null {
 
 async function runFfmpeg(args: string[], label: string): Promise<void> {
   await new Promise<void>((resolve, reject) => {
-    const child = spawn(ffmpegBin(), args, { stdio: ["ignore", "pipe", "pipe"] });
+    const child = spawn(/* turbopackIgnore: true */ ffmpegBin(), args, { stdio: ["ignore", "pipe", "pipe"] });
     let stderr = "";
     child.stderr.on("data", (chunk: Buffer) => {
       stderr += chunk.toString("utf8");

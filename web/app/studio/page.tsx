@@ -38,9 +38,9 @@ function nearestTargetLength(seconds: number): (typeof TARGET_LENGTHS)[number] {
   );
 }
 
-/** Short list title: "05/09 Portrait 30s" */
+/** Short list title: "10/10 Portrait 30s" — DD/MM from project created_at. */
 function projectShortLabel(project: ApiProjectSummary): string {
-  const datePart = formatDayMonth(project.wedding_date);
+  const datePart = formatDayMonth(project.created_at);
   const orient = capitalizeLabel(project.orientation);
   const duration = `${Math.round(project.max_duration || 0)}s`;
   return `${datePart} ${orient} ${duration}`;
@@ -48,7 +48,17 @@ function projectShortLabel(project: ApiProjectSummary): string {
 
 function formatDayMonth(isoDate: string | null | undefined): string {
   if (!isoDate) return "--/--";
-  const raw = isoDate.trim().slice(0, 10);
+  const trimmed = isoDate.trim();
+  // ISO timestamps (created_at): use local calendar day
+  if (trimmed.includes("T") || /Z$/i.test(trimmed)) {
+    const d = new Date(trimmed);
+    if (!Number.isNaN(d.getTime())) {
+      const dd = String(d.getDate()).padStart(2, "0");
+      const mm = String(d.getMonth() + 1).padStart(2, "0");
+      return `${dd}/${mm}`;
+    }
+  }
+  const raw = trimmed.slice(0, 10);
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(raw);
   if (match) return `${match[3]}/${match[2]}`;
   const dmy = /^(\d{1,2})[/-](\d{1,2})(?:[/-]\d{2,4})?$/.exec(raw);

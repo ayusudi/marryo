@@ -90,6 +90,12 @@ MCP Toolbox (optional for pipeline MCP proof): see [`mcp/toolbox/README.md`](mcp
 
 API docs while `npm run dev` is running: [http://localhost:3100/api/docs](http://localhost:3100/api/docs)
 
+## Deploy (GCP)
+
+All-in path: Cloud Run (web + agent) + GCS + Cloud SQL + ClickHouse Cloud + Vertex AI.
+
+See **[deploy/gcp.md](deploy/gcp.md)** — bootstrap, secrets, and `./deploy/gcp-deploy.sh`.
+
 ## License
 
 Marryo source code is licensed under the [Apache License 2.0](LICENSE) (OSI-approved).

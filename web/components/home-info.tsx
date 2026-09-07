@@ -154,7 +154,7 @@ export function HomeInfoSection({ googleConfigured = true }: { googleConfigured?
         <div className="flex min-w-0 flex-col bg-white">
           <div className={`${eyebrowRowClass} sm:px-10`}>{activeLabel}</div>
           <div className="px-6 py-8 sm:px-10 sm:py-10">
-            <div key={active} className="info-pane-enter max-w-2xl">
+            <div key={active} className="info-pane-enter max-w-2xl pb-12">
               <Panel id={active} googleConfigured={googleConfigured} />
             </div>
           </div>

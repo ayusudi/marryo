@@ -1,0 +1,37 @@
+# Context: repo root. Build: docker build -f Dockerfile.agent -t marryo-agent .
+# ADK HTTP server for /list-apps and Agent Engine–compatible tooling.
+
+FROM python:3.13-slim-bookworm
+WORKDIR /app/agent
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    ffmpeg \
+    libgl1 \
+    libglib2.0-0 \
+    libsm6 \
+    libxext6 \
+    libxrender1 \
+    ca-certificates \
+  && rm -rf /var/lib/apt/lists/*
+
+COPY agent/requirements.txt agent/pyproject.toml ./
+COPY agent/marryo_agent ./marryo_agent
+COPY agent/tools ./tools
+COPY agent/cv ./cv
+COPY agent/config ./config
+COPY agent/assets ./assets
+
+RUN python -m venv /app/agent/.venv \
+  && .venv/bin/pip install --no-cache-dir -U pip \
+  && .venv/bin/pip install --no-cache-dir -r requirements.txt \
+  && .venv/bin/pip install --no-cache-dir -e .
+
+ENV PATH="/app/agent/.venv/bin:${PATH}"
+ENV PYTHONPATH=/app/agent
+ENV PORT=8080
+ENV GOOGLE_GENAI_USE_VERTEXAI=1
+
+EXPOSE 8080
+# ADK api_server binds for Cloud Run (PORT injected by the platform).
+CMD ["sh", "-c", "adk api_server --host 0.0.0.0 --port ${PORT:-8080} ."]

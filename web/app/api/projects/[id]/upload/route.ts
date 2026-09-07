@@ -1,11 +1,8 @@
-import { rm } from "node:fs/promises";
-import path from "node:path";
 import { randomBytes } from "node:crypto";
 
-import { extractClipPoster } from "@marryo/services/clip-media";
+import { finalizeUploadedClip } from "@marryo/services/clip-upload";
 import {
   countClips,
-  createClip,
   getProject,
   setProjectStatus,
   type ApiClip,
@@ -16,10 +13,8 @@ import {
   assertClipQuota,
   assertExtensionAndMime,
   assertFileSize,
-  ffprobe,
   TechValidationError,
 } from "@marryo/services/tech-validation";
-import { runVisualValidation } from "@marryo/services/visual-validation";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -32,6 +27,7 @@ function newClipId(): string {
   return `clp_${randomBytes(8).toString("hex")}`;
 }
 
+/** Multipart upload (local / small files). Prefer /upload/init + GCS for production. */
 export async function POST(request: Request, { params }: Params) {
   const { id: projectId } = await params;
   const project = await getProject(projectId);
@@ -94,54 +90,13 @@ export async function POST(request: Request, { params }: Params) {
         contentType: file.type || "video/mp4",
       });
 
-      const isMaterialized = !stored.absolutePath;
-      const localPath = stored.absolutePath || (await storage.materializeLocal(stored.storageUri));
-
-      let probe;
-      let visual;
-      try {
-        try {
-          probe = await ffprobe(localPath);
-        } catch (error) {
-          await storage.delete(stored.storageUri);
-          throw error;
-        }
-
-        visual = await runVisualValidation(localPath);
-
-        let thumbnailUri: string | null = null;
-        try {
-          thumbnailUri = await extractClipPoster({
-            projectId,
-            clipId,
-            localVideoPath: localPath,
-            duration: probe.duration,
-          });
-        } catch {
-          thumbnailUri = null;
-        }
-
-        const clip = await createClip({
-          clipId,
-          projectId,
-          filename,
-          storageUri: stored.storageUri,
-          duration: probe.duration,
-          status: "uploaded",
-          valid: visual.valid,
-          validationWarnings: {
-            warnings: visual.warnings,
-            metrics: visual.metrics,
-          },
-          thumbnailUri,
-        });
-
-        clips.push(clip);
-      } finally {
-        if (isMaterialized && localPath) {
-          await rm(path.dirname(localPath), { recursive: true, force: true }).catch(() => {});
-        }
-      }
+      const clip = await finalizeUploadedClip({
+        projectId,
+        clipId,
+        filename,
+        storageUri: stored.storageUri,
+      });
+      clips.push(clip);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       errors.push({ filename, error: message });

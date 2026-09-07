@@ -1,27 +1,12 @@
-import path from "node:path";
-import { pathToFileURL } from "node:url";
-
 import { PrismaClient } from "@prisma/client";
 
 /** Bump when Prisma models change so HMR drops a stale client without new delegates. */
 const PRISMA_CLIENT_REV = 5;
 
-function repoRoot(): string {
-  const cwd = process.cwd();
-  return cwd.endsWith(`${path.sep}web`) ? path.join(cwd, "..") : cwd;
-}
-
 function resolveDatabaseUrl(): string {
-  const raw = process.env.DATABASE_URL ?? "file:dev.db";
-  if (!raw.startsWith("file:")) return raw;
-
-  const filePath = raw.slice("file:".length);
-  if (path.isAbsolute(filePath)) return raw;
-
-  // Match Prisma CLI: relative SQLite paths are resolved from the schema directory.
-  const schemaDir = path.join(repoRoot(), "prisma");
-  const absolute = path.resolve(schemaDir, filePath);
-  return pathToFileURL(absolute).href;
+  // Production / Cloud SQL: postgresql://… (or unix socket host=/cloudsql/…)
+  // Local: docker compose postgres — see deploy/gcp.md
+  return process.env.DATABASE_URL ?? "postgresql://marryo:marryo@127.0.0.1:5432/marryo";
 }
 
 const globalForPrisma = globalThis as typeof globalThis & {
@@ -53,7 +38,7 @@ function clientLooksCurrent(client: PrismaClient): boolean {
   );
 }
 
-/** Shared Prisma client (SQLite in Phase 1). Avoids exhausting connections in Next.js HMR. */
+/** Shared Prisma client (PostgreSQL / Cloud SQL). Avoids exhausting connections in Next.js HMR. */
 export function prisma(): PrismaClient {
   process.env.DATABASE_URL = resolveDatabaseUrl();
   const existing = globalForPrisma.__marryoPrisma;

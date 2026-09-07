@@ -1,0 +1,14 @@
+[
+  {
+    "origin": [
+      "https://marryo-web-sskudjqobq-as.a.run.app",
+      "https://marryo-web-50215720898.asia-southeast1.run.app",
+      "https://marryo.ayusudi.com",
+      "https://server-marryo.ayusudi.com",
+      "http://localhost:3100"
+    ],
+    "method": ["GET", "PUT", "HEAD", "OPTIONS"],
+    "responseHeader": ["Content-Type", "Content-Length", "x-goog-resumable"],
+    "maxAgeSeconds": 3600
+  }
+]

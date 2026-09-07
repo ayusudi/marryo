@@ -35,6 +35,14 @@ export interface StorageUploadResult {
 export interface StorageService {
   upload(input: StorageUploadInput): Promise<StorageUploadResult>;
   getSignedUrl(storageUri: string, expiresInSeconds?: number): Promise<string>;
+  /** Browser-direct PUT (GCS). Local backend throws. */
+  getWriteSignedUrl?(
+    objectPath: string,
+    contentType: string,
+    expiresInSeconds?: number,
+  ): Promise<{ uploadUrl: string; storageUri: string }>;
+  /** True when object exists (GCS) / file exists (local). */
+  objectExists?(storageUri: string): Promise<boolean>;
   delete(storageUri: string): Promise<void>;
   /**
    * Ensure a local filesystem path for CV/ffprobe.
@@ -93,6 +101,14 @@ export class LocalStorageService implements StorageService {
       throw new Error(`object not found: ${storageUri}`);
     }
     return `file://${absolute}`;
+  };
+
+  objectExists = async (storageUri: string): Promise<boolean> => {
+    try {
+      return existsSync(this.#resolveLocal(storageUri));
+    } catch {
+      return false;
+    }
   };
 
   delete = async (storageUri: string): Promise<void> => {
@@ -167,6 +183,31 @@ export class GcsStorageService implements StorageService {
     return url;
   };
 
+  getWriteSignedUrl = async (
+    objectPath: string,
+    contentType: string,
+    expiresInSeconds = 900,
+  ): Promise<{ uploadUrl: string; storageUri: string }> => {
+    requireGcsConfigured();
+    const relative = assertSafeRelative(objectPath);
+    const [uploadUrl] = await bucket()
+      .file(relative)
+      .getSignedUrl({
+        version: "v4",
+        action: "write",
+        expires: Date.now() + expiresInSeconds * 1000,
+        contentType: contentType || "application/octet-stream",
+      });
+    return { uploadUrl, storageUri: gsUri(relative) };
+  };
+
+  objectExists = async (storageUri: string): Promise<boolean> => {
+    requireGcsConfigured();
+    const { objectPath } = parseGsUri(storageUri);
+    const [exists] = await bucket().file(objectPath).exists();
+    return exists;
+  };
+
   delete = async (storageUri: string): Promise<void> => {
     requireGcsConfigured();
     const { objectPath } = parseGsUri(storageUri);
@@ -183,7 +224,7 @@ export class GcsStorageService implements StorageService {
     requireGcsConfigured();
     const { objectPath } = parseGsUri(storageUri);
     const dir = targetDir || (await mkdtemp(path.join(tmpdir(), "marryo-gcs-")));
-    const dest = path.join(dir, path.basename(objectPath) || "object.bin");
+    const dest = path.join(/* turbopackIgnore: true */ dir, path.basename(objectPath) || "object.bin");
     await bucket().file(objectPath).download({ destination: dest });
     return dest;
   };
@@ -213,6 +254,22 @@ class RoutingStorageService implements StorageService {
     storageUri.startsWith(LOCAL_PREFIX)
       ? this.localFallback.getSignedUrl(storageUri, expiresInSeconds)
       : this.primary.getSignedUrl(storageUri, expiresInSeconds);
+
+  getWriteSignedUrl = (
+    objectPath: string,
+    contentType: string,
+    expiresInSeconds?: number,
+  ) => {
+    if (!this.primary.getWriteSignedUrl) {
+      throw new Error("direct upload signed URLs require GCS (STORAGE_BACKEND=gcs)");
+    }
+    return this.primary.getWriteSignedUrl(objectPath, contentType, expiresInSeconds);
+  };
+
+  objectExists = (storageUri: string) =>
+    storageUri.startsWith(LOCAL_PREFIX)
+      ? this.localFallback.objectExists!(storageUri)
+      : this.primary.objectExists!(storageUri);
 
   delete = (storageUri: string) =>
     storageUri.startsWith(LOCAL_PREFIX)

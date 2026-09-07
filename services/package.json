@@ -23,6 +23,7 @@
     "./soundtrack": "./src/soundtrack.ts",
     "./films": "./src/films.ts",
     "./clip-media": "./src/clip-media.ts",
+    "./clip-upload": "./src/clip-upload.ts",
     "./account": "./src/account.ts",
     "./db": "./src/db.ts"
   },
