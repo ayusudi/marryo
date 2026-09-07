@@ -33,7 +33,7 @@ Marryo is an AI pre-wedding **short film** studio. Couples upload a focused set 
 
 You leave with a picture-locked short film — portrait or landscape — without opening a timeline.
 
-![Ingest → Cut → Finish pipeline](images/ingest-cut-finish.jpg)
+![Ingest → Cut → Finish pipeline](images/ingest-cut-finish.png)
 
 ---
 
@@ -53,7 +53,7 @@ Marryo is an **agentic pipeline**, not a single chat box.
 | Delivery | FFmpeg (normalize → stitch → grade → soundtrack remux) |
 | Hosting | Cloud Run (`marryo-web` + `marryo-agent`), Secret Manager, Artifact Registry |
 
-![System architecture: Client · marryo-web · marryo-agent · Data](images/architecture.jpg)
+![System architecture: Client · marryo-web · marryo-agent · Data](images/architecture.png)
 
 The Next.js API orchestrates the studio. The ADK agent owns storytelling: analyze clips, score moments, plan the edit, validate the EDL. Deterministic CV and FFmpeg handle the hard media work so the model doesn’t invent cuts it can’t render.
 
@@ -63,7 +63,7 @@ We optimized Direct → soundtrack for roughly **&lt;1 minute**: clip caps, para
 
 We developed the stack in Cursor (agentic coding, repo workflows, Cloud Run deploys) while iterating on the Film Director in the Google ADK web UI — briefing mood/tone options, then running tool traces end-to-end.
 
-![Cursor workspace beside ADK Film Director chat](images/dev-cursor-and-adk.jpg)
+![Cursor workspace beside ADK Film Director chat](images/dev-cursor-and-adk.png)
 
 ---
 
@@ -75,7 +75,7 @@ Two deterministic score engines sit between “creative” and “renderable.”
 
 Each analyzed moment gets a **quality_score (0–100)** from theme weights in `scoring.json` (romantic / cinematic / fun): couple presence, emotion match, visual quality, lighting, shot type, duration sweet spot, and an other-people penalty. Scores land in ClickHouse; the Film Director prefers higher moments for the EDL.
 
-![Moment factors sum to quality_score in ClickHouse](images/moment-scoring.jpg)
+![Moment factors sum to quality_score in ClickHouse](images/moment-scoring.png)
 
 ### Soundtrack scoring (Sound)
 
@@ -83,7 +83,7 @@ After the picture lock, catalog tracks are ranked against the cut:
 
 **0.40·mood + 0.30·emotion + 0.25·tempo/energy + 0.05·length → top 5**
 
-![Weighted soundtrack scoring to top 5 tracks](images/soundtrack-scoring.jpg)
+![Weighted soundtrack scoring to top 5 tracks](images/soundtrack-scoring.png)
 
 ### Color grading (Grade)
 
@@ -95,7 +95,7 @@ FFmpeg applies `visual_tone` then `mood` filters from `render_presets.json`, and
 
 The ADK agent (`marryo_agent`) runs tools such as `score_moments` → `plan_edit` → `validate_edl`, then returns a validated EDL for a real project (couple, mood, visual tone, target duration).
 
-![ADK event trace: score_moments, plan_edit, validate_edl → directed EDL](images/adk-director-edl.jpg)
+![ADK event trace: score_moments, plan_edit, validate_edl → directed EDL](images/adk-director-edl.png)
 
 Example outcome from a warm / cinematic brief: ~26s cut against a 30s target, ending card copy, EDL marked valid and ready to render.
 
@@ -161,9 +161,9 @@ Example outcome from a warm / cinematic brief: ~26s cut against a 30s target, en
 
 | File | Description |
 |------|-------------|
-| [`images/ingest-cut-finish.jpg`](images/ingest-cut-finish.jpg) | Studio pipeline: Ingest → Cut → Finish |
-| [`images/architecture.jpg`](images/architecture.jpg) | Client, Cloud Run web/agent, data stores |
-| [`images/moment-scoring.jpg`](images/moment-scoring.jpg) | Moment quality_score breakdown |
-| [`images/soundtrack-scoring.jpg`](images/soundtrack-scoring.jpg) | Soundtrack weighted ranking |
-| [`images/dev-cursor-and-adk.jpg`](images/dev-cursor-and-adk.jpg) | Cursor + ADK local development |
-| [`images/adk-director-edl.jpg`](images/adk-director-edl.jpg) | ADK tool trace and directed EDL |
+| [`images/ingest-cut-finish.png`](images/ingest-cut-finish.png) | Studio pipeline: Ingest → Cut → Finish |
+| [`images/architecture.png`](images/architecture.png) | Client, Cloud Run web/agent, data stores |
+| [`images/moment-scoring.png`](images/moment-scoring.png) | Moment quality_score breakdown |
+| [`images/soundtrack-scoring.png`](images/soundtrack-scoring.png) | Soundtrack weighted ranking |
+| [`images/dev-cursor-and-adk.png`](images/dev-cursor-and-adk.png) | Cursor + ADK local development |
+| [`images/adk-director-edl.png`](images/adk-director-edl.png) | ADK tool trace and directed EDL |
