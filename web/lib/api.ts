@@ -592,13 +592,21 @@ export async function selectSoundtrack(
   return parseJson(res);
 }
 
-export async function confirmGrade(id: string): Promise<{
+export async function confirmGrade(
+  id: string,
+  opts: { use_grade?: boolean } = {},
+): Promise<{
   ok: boolean;
   current_stage: string;
+  use_grade?: boolean;
   session_ended_at: string | null;
   archive?: ProjectArchive;
 }> {
-  const res = await fetch(`/api/projects/${id}/grade/confirm`, { method: "POST" });
+  const res = await fetch(`/api/projects/${id}/grade/confirm`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ use_grade: opts.use_grade !== false }),
+  });
   return parseJson(res);
 }
 

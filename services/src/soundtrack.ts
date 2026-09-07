@@ -863,3 +863,173 @@ export async function selectSoundtrack(
   if (!api) throw new SoundtrackError("session missing", 500);
   return api;
 }
+
+/**
+ * Grade step choice: keep the graded picture look, or rebuild the selected film
+ * on the ungraded twin (mute / catalog / original).
+ */
+export async function applyGradePreference(
+  projectId: string,
+  useGrade: boolean,
+): Promise<void> {
+  if (useGrade) return;
+
+  const session = await prisma().soundtrackSession.findFirst({
+    where: { projectId, status: "ready" },
+    orderBy: { createdAt: "desc" },
+    include: { versions: true },
+  });
+  if (!session) {
+    throw new SoundtrackError("no ready soundtrack session — pick a soundtrack first", 409);
+  }
+
+  const picture = await prisma().render.findUnique({
+    where: { renderId: session.pictureRenderId },
+  });
+  if (!picture?.storageUri) {
+    throw new SoundtrackError("picture render missing", 409);
+  }
+
+  const ungradedUri = picture.storageUri.replace(/\.mp4$/i, ".ungraded.mp4");
+  if (ungradedUri === picture.storageUri) {
+    throw new SoundtrackError("ungraded twin path could not be derived", 409);
+  }
+
+  let storage;
+  try {
+    storage = storageService();
+  } catch (error) {
+    if (error instanceof StorageNotConfiguredError) {
+      throw new SoundtrackError(error.message, 503);
+    }
+    throw error;
+  }
+
+  const mode = session.selectedMode || "mute";
+
+  if (mode === "mute") {
+    await upsertProjectFilm({
+      projectId,
+      storageUri: ungradedUri,
+      title: null,
+      trackId: null,
+      trackTitle: null,
+      orientation: picture.orientation,
+      duration: picture.duration,
+      width: picture.width,
+      height: picture.height,
+      soundtrackSessionId: session.sessionId,
+      soundtrackVersionId: null,
+      pictureRenderId: session.pictureRenderId,
+    });
+    await setStageMessage(projectId, "Keeping ungraded picture (no color grade)");
+    return;
+  }
+
+  if (mode === "original") {
+    await setStageMessage(projectId, "Rebuilding original sound on ungraded picture…");
+    const workDir = await mkdtemp(path.join(tmpdir(), "marryo-ungraded-orig-"));
+    try {
+      const pictureLocal = await storage.materializeLocal(ungradedUri, workDir);
+      const outPath = path.join(workDir, "original-ungraded.mp4");
+      await remuxOriginalAudioOntoPicture({
+        projectId,
+        picturePath: pictureLocal,
+        outPath,
+        workDir,
+        durationSec: picture.duration || 60,
+      });
+      const body = await readFile(outPath);
+      const uploaded = await storage.upload({
+        objectPath: soundtrackVersionPath(projectId, session.sessionId, `original_ungraded_${Date.now()}`),
+        body,
+        contentType: "video/mp4",
+      });
+      await upsertProjectFilm({
+        projectId,
+        storageUri: uploaded.storageUri,
+        title: null,
+        trackId: null,
+        trackTitle: "Original sound (ungraded)",
+        orientation: picture.orientation,
+        duration: picture.duration,
+        width: picture.width,
+        height: picture.height,
+        soundtrackSessionId: session.sessionId,
+        soundtrackVersionId: null,
+        pictureRenderId: session.pictureRenderId,
+      });
+      await setStageMessage(projectId, "Keeping ungraded picture with original sound");
+      return;
+    } finally {
+      await rm(workDir, { recursive: true, force: true }).catch(() => undefined);
+    }
+  }
+
+  // catalog
+  const version = session.versions.find((v) => v.versionId === session.selectedVersionId);
+  if (!version?.trackId) {
+    throw new SoundtrackError("no catalog soundtrack selected", 409);
+  }
+
+  let musicFile: string | null = null;
+  if (session.recommendationsJson) {
+    try {
+      const raw = JSON.parse(session.recommendationsJson) as {
+        recommendations?: Array<{ track_id?: string; file?: string }>;
+      };
+      const hit = (raw.recommendations ?? []).find((r) => r.track_id === version.trackId);
+      if (hit?.file) musicFile = hit.file;
+    } catch {
+      musicFile = null;
+    }
+  }
+  if (!musicFile) {
+    throw new SoundtrackError(
+      `could not resolve catalog file for track ${version.trackId} — refresh soundtrack and re-select`,
+      409,
+    );
+  }
+
+  await setStageMessage(projectId, `Rebuilding ${version.title} on ungraded picture…`);
+  const workDir = await mkdtemp(path.join(tmpdir(), "marryo-ungraded-cat-"));
+  try {
+    const pictureLocal = await storage.materializeLocal(ungradedUri, workDir);
+    const musicPath = path.join(musicDir(), musicFile);
+    await access(musicPath);
+    const outPath = path.join(workDir, "catalog-ungraded.mp4");
+    const durationSec = picture.duration || (await ffprobe(pictureLocal)).duration || 60;
+    await remuxTrackOntoPicture({
+      picturePath: pictureLocal,
+      musicPath,
+      outPath,
+      durationSec,
+    });
+    const body = await readFile(outPath);
+    const uploaded = await storage.upload({
+      objectPath: soundtrackVersionPath(
+        projectId,
+        session.sessionId,
+        `ungraded_${version.versionId}_${Date.now()}`,
+      ),
+      body,
+      contentType: "video/mp4",
+    });
+    await upsertProjectFilm({
+      projectId,
+      storageUri: uploaded.storageUri,
+      trackId: version.trackId,
+      trackTitle: `${version.title} (ungraded)`,
+      orientation: picture.orientation,
+      duration: picture.duration,
+      width: picture.width,
+      height: picture.height,
+      soundtrackSessionId: session.sessionId,
+      soundtrackVersionId: version.versionId,
+      pictureRenderId: session.pictureRenderId,
+    });
+    await setStageMessage(projectId, `Keeping ungraded picture · ${version.title}`);
+  } finally {
+    await rm(workDir, { recursive: true, force: true }).catch(() => undefined);
+  }
+}

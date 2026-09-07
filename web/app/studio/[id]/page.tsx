@@ -241,6 +241,21 @@ export default function StudioProjectPage({ params }: { params: Promise<{ id: st
     setStep(id as StudioStep);
   }, []);
 
+  const updatePipelineJournal = useCallback(
+    (extra: {
+      sceneSummary?: string | null;
+      render?: ApiRender | null;
+    }) => {
+      // Defer so child updaters never setState on this page during render.
+      queueMicrotask(() => setJournalExtras((prev) => ({ ...prev, ...extra })));
+    },
+    [],
+  );
+
+  const updateSoundtrackJournal = useCallback((label: string) => {
+    queueMicrotask(() => setJournalExtras((prev) => ({ ...prev, soundtrackLabel: label })));
+  }, []);
+
   async function runDelete() {
     setDeleting(true);
     setError(null);
@@ -366,10 +381,7 @@ export default function StudioProjectPage({ params }: { params: Promise<{ id: st
             readOnly={readOnly}
             onError={setError}
             onProjectChange={setProject}
-            onJournal={(extra) => {
-              // Defer so PipelineStep never calls setState on the parent during its own render/updater.
-              queueMicrotask(() => setJournalExtras((prev) => ({ ...prev, ...extra })));
-            }}
+            onJournal={updatePipelineJournal}
             onDone={async () => {
               await refresh();
               setStep("soundtrack");
@@ -382,9 +394,7 @@ export default function StudioProjectPage({ params }: { params: Promise<{ id: st
             orientation={project.orientation}
             readOnly={readOnly}
             onError={setError}
-            onJournal={(label) => {
-              queueMicrotask(() => setJournalExtras((prev) => ({ ...prev, soundtrackLabel: label })));
-            }}
+            onJournal={updateSoundtrackJournal}
             onDone={async () => {
               setForceEdit(false);
               await refresh();
@@ -1247,6 +1257,7 @@ function SoundtrackStep({
   const [pictureUrl, setPictureUrl] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const [saving, setSaving] = useState(false);
+  const startedRef = useRef(false);
 
   const load = useCallback(
     (force = false) => {
@@ -1294,6 +1305,9 @@ function SoundtrackStep({
   );
 
   useEffect(() => {
+    // Guard against parent re-renders recreating `load` (e.g. journal updates) — only auto-load once.
+    if (startedRef.current) return;
+    startedRef.current = true;
     load(false);
   }, [load]);
 
@@ -1520,7 +1534,7 @@ function GradingStep({
       <p className="max-w-xl text-ink-muted">
         {readOnly
           ? "Color grade comparison for this short film. Before is ungraded; After is graded."
-          : "Compare color grade before you finish. After is the graded short film; Before is the ungraded picture lock."}
+          : "Compare before and after, then choose: keep the color grade, or finish without it."}
       </p>
 
       <div className="flex flex-wrap gap-2">
@@ -1599,28 +1613,54 @@ function GradingStep({
       ) : null}
 
       {!readOnly ? (
-        <div className="flex flex-wrap gap-3">
-          <PrimaryButton
-            disabled={saving || !gradedUrl}
-            onClick={() => {
-              setSaving(true);
-              void (async () => {
-                try {
-                  await confirmGrade(projectId);
-                  await onDone();
-                } catch (err) {
-                  onError(err instanceof ApiError ? err.message : "Could not confirm grade");
-                } finally {
-                  setSaving(false);
-                }
-              })();
-            }}
-          >
-            {saving ? "Saving…" : "Keep graded short film"}
-          </PrimaryButton>
-          <GhostButton disabled={saving} onClick={onChangeSong}>
-            Change soundtrack
-          </GhostButton>
+        <div className="space-y-4">
+          <p className="text-sm text-ink-muted">
+            Choose whether to keep the color grade on your short film, or finish with the ungraded
+            picture.
+          </p>
+          <div className="flex flex-wrap gap-3">
+            <PrimaryButton
+              disabled={saving || !gradedUrl}
+              onClick={() => {
+                setSaving(true);
+                void (async () => {
+                  try {
+                    await confirmGrade(projectId, { use_grade: true });
+                    await onDone();
+                  } catch (err) {
+                    onError(err instanceof ApiError ? err.message : "Could not confirm grade");
+                  } finally {
+                    setSaving(false);
+                  }
+                })();
+              }}
+            >
+              {saving ? "Saving…" : "Keep graded"}
+            </PrimaryButton>
+            <GhostButton
+              disabled={saving || !ungradedUrl}
+              onClick={() => {
+                setSaving(true);
+                void (async () => {
+                  try {
+                    await confirmGrade(projectId, { use_grade: false });
+                    await onDone();
+                  } catch (err) {
+                    onError(
+                      err instanceof ApiError ? err.message : "Could not continue without grade",
+                    );
+                  } finally {
+                    setSaving(false);
+                  }
+                })();
+              }}
+            >
+              Continue without grade
+            </GhostButton>
+            <GhostButton disabled={saving} onClick={onChangeSong}>
+              Change soundtrack
+            </GhostButton>
+          </div>
         </div>
       ) : null}
     </div>

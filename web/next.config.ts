@@ -17,6 +17,9 @@ const repoRoot =
 loadEnvConfig(repoRoot, process.env.NODE_ENV !== "production", console, true);
 
 const nextConfig: NextConfig = {
+  // Hide the Next.js route/dev badge while recording local demos.
+  // Re-enable later with `devIndicators: { position: "bottom-left" }` (or remove this line).
+  devIndicators: false,
   // Standalone output for Cloud Run / Docker (see Dockerfile.web).
   output: "standalone",
   // @marryo/services ships TypeScript source, so Next has to compile it.
