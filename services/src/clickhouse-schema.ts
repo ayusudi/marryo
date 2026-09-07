@@ -4,7 +4,7 @@
  */
 
 import { createClient } from "@clickhouse/client";
-import { readFile } from "node:fs/promises";
+import { access, readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -30,10 +30,87 @@ function requireConfigured(): void {
   }
 }
 
-function schemaPath(): string {
-  const here = path.dirname(fileURLToPath(import.meta.url));
-  // services/src → repo root
-  return path.resolve(here, "../../clickhouse/schema.sql");
+/**
+ * Keep in sync with clickhouse/schema.sql.
+ * Embedded so Cloud Run / Next standalone never depends on a repo-relative file path.
+ */
+const EMBEDDED_SCHEMA_SQL = `-- Marryo ClickHouse analytics schema (Phase 3).
+CREATE DATABASE IF NOT EXISTS marryo;
+
+CREATE TABLE IF NOT EXISTS marryo.scenes
+(
+    scene_id String,
+    clip_id String,
+    project_id String,
+    start_time Float64,
+    end_time Float64,
+    duration Float64,
+    created_at DateTime64(3, 'UTC') DEFAULT now64(3)
+)
+ENGINE = MergeTree
+ORDER BY (project_id, clip_id, scene_id);
+
+CREATE TABLE IF NOT EXISTS marryo.video_moments
+(
+    moment_id String,
+    scene_id String,
+    clip_id String,
+    project_id String,
+    storage_uri String,
+    start_time Float64,
+    end_time Float64,
+    description String,
+    action String,
+    emotion String,
+    shot_type String,
+    lighting String,
+    camera_motion String,
+    bride_present Bool,
+    groom_present Bool,
+    other_people Bool,
+    visual_quality String,
+    duration Float64,
+    created_at DateTime64(3, 'UTC') DEFAULT now64(3)
+)
+ENGINE = MergeTree
+ORDER BY (project_id, clip_id, moment_id);
+
+CREATE TABLE IF NOT EXISTS marryo.moment_scores
+(
+    moment_id String,
+    project_id String,
+    quality_score Float64,
+    score_breakdown String,
+    theme String,
+    created_at DateTime64(3, 'UTC') DEFAULT now64(3)
+)
+ENGINE = MergeTree
+ORDER BY (project_id, moment_id);
+`;
+
+async function loadSchemaSql(): Promise<string> {
+  const candidates: string[] = [];
+  try {
+    const here = path.dirname(fileURLToPath(import.meta.url));
+    candidates.push(path.resolve(here, "../../clickhouse/schema.sql"));
+  } catch {
+    // bundled runtime may not expose a real file URL
+  }
+  candidates.push(
+    path.resolve(process.cwd(), "clickhouse/schema.sql"),
+    path.resolve(process.cwd(), "../clickhouse/schema.sql"),
+    "/app/clickhouse/schema.sql",
+  );
+
+  for (const candidate of candidates) {
+    try {
+      await access(candidate);
+      return await readFile(candidate, "utf8");
+    } catch {
+      // try next
+    }
+  }
+  return EMBEDDED_SCHEMA_SQL;
 }
 
 function splitStatements(sql: string): string[] {
@@ -71,7 +148,7 @@ let schemaEnsured = false;
 export async function ensureSchema(force = false): Promise<void> {
   requireConfigured();
   if (schemaEnsured && !force) return;
-  const sql = await readFile(schemaPath(), "utf8");
+  const sql = await loadSchemaSql();
   const statements = splitStatements(sql);
   const bootstrap = bootstrapClient();
   try {

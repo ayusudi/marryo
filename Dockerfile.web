@@ -88,6 +88,7 @@ COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
 COPY --from=python-deps /opt/agent /opt/agent
 COPY agent /app/agent
+COPY clickhouse/schema.sql /app/clickhouse/schema.sql
 RUN rm -rf /app/agent/.venv && ln -s /opt/agent/.venv /app/agent/.venv \
   && mkdir -p /app/tmp /app/uploads \
   && chown -R marryo:marryo /app /opt/agent \
