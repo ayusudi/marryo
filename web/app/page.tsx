@@ -57,13 +57,13 @@ export default function LandingPage() {
           <section className="flex flex-1 flex-col justify-end pb-8 pt-24 sm:justify-center sm:pb-16 sm:pt-0">
             <div className="max-w-2xl">
               <h1 className="font-display animate-rise text-[2.35rem] leading-[1.12] tracking-[-0.02em] text-balance sm:text-5xl lg:text-[3.35rem]">
-                Your memories already contain the story. Marryo turns them into a film.
+                Your memories already contain the story. Marryo turns them into a short film.
               </h1>
               <p
                 className="animate-rise mt-6 max-w-md text-base leading-relaxed text-ivory/70 sm:text-lg"
                 style={{ animationDelay: "120ms" }}
               >
-                Upload your footage. We find the moments, shape the cut, and score the soundtrack —
+                We find the moments, shape the cut, and score the soundtrack,
                 a cinematic edit that feels like you.
               </p>
               <div

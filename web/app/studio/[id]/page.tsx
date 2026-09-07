@@ -51,7 +51,7 @@ const STEPS = [
   { id: "pipeline", label: "Direct" },
   { id: "soundtrack", label: "Sound" },
   { id: "grading", label: "Grade" },
-  { id: "complete", label: "Film" },
+  { id: "complete", label: "Short film" },
 ];
 
 function capitalizeLabel(value: string): string {
@@ -90,7 +90,7 @@ function projectShortLabel(project: ApiProject): string {
 function namesLine(project: ApiProject): string {
   const names = project.couple_names.map((c) => c.name).filter(Boolean);
   if (names.length >= 2) return `${names[0]} & ${names[1]}`;
-  return names[0] ?? "Your film";
+  return names[0] ?? "Your short film";
 }
 
 function filmFrameClass(orientation: string | null | undefined): string {
@@ -514,7 +514,7 @@ function UploadStep({
     <div className="space-y-7">
       <p className="max-w-lg text-sm leading-relaxed text-ink-muted">
         {readOnly
-          ? "Clip analysis from validation — Kept clips entered the film; open Detail for measurements."
+          ? "Clip analysis from validation — Kept clips entered the short film; open Detail for measurements."
           : `Up to ${maxClips} clips per project. We score brightness, sharpness, and faces — only Kept footage continues.`}
       </p>
 
@@ -1280,7 +1280,7 @@ function SoundtrackStep({
     <div className="space-y-8">
       <p className="max-w-xl text-ink-muted">
         {readOnly
-          ? "Preview soundtrack options used for this film. Selection is locked in review."
+          ? "Preview soundtrack options used for this short film. Selection is locked in review."
           : "Preview all seven options, then save the one you want. Nothing is locked until you choose."}
       </p>
 
@@ -1452,8 +1452,8 @@ function GradingStep({
     <div className="space-y-8">
       <p className="max-w-xl text-ink-muted">
         {readOnly
-          ? "Color grade comparison for this film. Before is ungraded; After is graded."
-          : "Compare color grade before you finish. After is the graded film; Before is the ungraded picture lock."}
+          ? "Color grade comparison for this short film. Before is ungraded; After is graded."
+          : "Compare color grade before you finish. After is the graded short film; Before is the ungraded picture lock."}
       </p>
 
       <div className="flex flex-wrap gap-2">
@@ -1549,7 +1549,7 @@ function GradingStep({
               })();
             }}
           >
-            {saving ? "Saving…" : "Keep graded film"}
+            {saving ? "Saving…" : "Keep graded short film"}
           </PrimaryButton>
           <GhostButton disabled={saving} onClick={onChangeSong}>
             Change soundtrack

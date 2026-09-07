@@ -93,8 +93,8 @@ export function summaryForClip(clip: ApiClip): string {
   if (clip.valid) {
     const m = vw?.metrics;
     return m
-      ? `This clip looks usable for the film — lighting ${m.brightness.toFixed(2)}, sharpness ${m.blur.toFixed(1)}, faces detected.`
-      : "This clip looks usable for the film.";
+      ? `This clip looks usable for the short film — lighting ${m.brightness.toFixed(2)}, sharpness ${m.blur.toFixed(1)}, faces detected.`
+      : "This clip looks usable for the short film.";
   }
   if (!vw?.warnings.length) return "This clip was rejected during validation.";
   return vw.warnings.map(warnText).join(" ");
@@ -148,7 +148,7 @@ const FLOW_STEPS = [
   { n: "03", title: "Direct", body: "Scenes → score → EDL → render (~1 min)", stepId: "pipeline" },
   { n: "04", title: "Soundtrack", body: "Choose 1 of 7: 5 tracks, mute, or original", stepId: "soundtrack" },
   { n: "05", title: "Grade", body: "Compare before / after color grade", stepId: "grading" },
-  { n: "06", title: "Film", body: "Download retained cuts · session notice", stepId: "complete" },
+  { n: "06", title: "Short film", body: "Download retained cuts · session notice", stepId: "complete" },
 ] as const;
 
 const ANALYZE_STEPS = [
@@ -510,7 +510,7 @@ function ClipAnalysisCard({ clip }: { clip: ApiClip }) {
                         {check.implication ? (
                           <div>
                             <p className="text-[10px] tracking-[0.16em] text-ink-muted uppercase">
-                              For your film
+                              For your short film
                             </p>
                             <p className="mt-1 text-sm leading-relaxed text-ink">
                               {check.implication}

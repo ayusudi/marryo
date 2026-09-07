@@ -8,7 +8,7 @@ import { useEffect, type ReactNode } from "react";
 /** Landing CTA — requires Google sign-in before opening the studio. */
 export function BeginFilmButton({
   className = "inline-flex items-center rounded-lg bg-ivory px-7 py-3.5 text-sm font-medium tracking-[0.06em] text-film transition hover:bg-white",
-  children = "Begin your film",
+  children = "Begin your short film",
   googleConfigured = true,
 }: {
   className?: string;

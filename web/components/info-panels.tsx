@@ -60,11 +60,11 @@ const TUTORIAL_STEPS = [
   {
     n: "05",
     title: "Compare color grade",
-    body: "Before (no grade) vs After (graded, muted). Confirm to end the session and keep your selected film.",
+    body: "Before (no grade) vs After (graded, muted). Confirm to end the session and keep your selected short film.",
   },
   {
     n: "06",
-    title: "Keep your film",
+    title: "Keep your short film",
     body: "Download before, after, and your selection. When the session ends, uploads and unused remuxes are removed — the muted before/after pair and your pick remain.",
   },
 ] as const;
@@ -81,7 +81,7 @@ export function TutorialPanel({
       <div>
         <InfoTitle
           eyebrow="Tutorial"
-          title="How Marryo builds your film"
+          title="How Marryo builds your short film"
           updated="6 Sep 2026"
           hideEyebrow={hideEyebrow}
         />
@@ -116,7 +116,7 @@ export function AboutPanel({ hideEyebrow = false }: { hideEyebrow?: boolean }) {
       <div>
         <InfoTitle
           eyebrow="About us"
-          title="Turn your wedding journey into a film, without the editing room."
+          title="Turn your wedding journey into a short film, without the editing room."
           updated="6 Sep 2026"
           hideEyebrow={hideEyebrow}
         />
@@ -137,13 +137,13 @@ export function AboutPanel({ hideEyebrow = false }: { hideEyebrow?: boolean }) {
         </p>
         <p>
           But when we started putting the footage together, we realized how much work it takes to
-          turn those moments into a film. Hours of footage to go through, moments to choose, stories
+          turn those moments into a short film. Hours of footage to go through, moments to choose, stories
           to piece together, and even more hours spent editing.
         </p>
         <p>And honestly, we didn&apos;t want to spend our wedding journey sitting in front of an editing timeline.</p>
         <p>
           We wanted to be there. To enjoy it. To capture the moments as they happened, and still have
-          a beautiful film to look back on.
+          a beautiful short film to look back on.
         </p>
         <p>That&apos;s why we built Marryo.</p>
         <p>
@@ -176,14 +176,14 @@ export function TermsPanel({ hideEyebrow = false }: { hideEyebrow?: boolean }) {
           <p>
             By using Marryo (“Service”), you agree to these Terms. If you do not agree, do not upload
             footage or create a project. Marryo is currently offered as a studio tool for creating
-            short wedding films from your own clips.
+            wedding short films from your own clips.
           </p>
         </section>
         <section className="space-y-3">
           <InfoH2>2. What Marryo does</InfoH2>
           <p>
             You upload up to 6 video clips you own or are allowed to use. Marryo may validate clips,
-            detect faces and scenes, propose an edit (EDL), render a picture-locked film, recommend
+            detect faces and scenes, propose an edit (EDL), render a picture-locked short film, recommend
             soundtrack versions from Marryo’s licensed catalog (plus mute / original), compare color
             grade, and let you download retained MP4s. Output is generated automatically; it is not a
             human-edited commission unless we say otherwise in writing.
@@ -201,7 +201,7 @@ export function TermsPanel({ hideEyebrow = false }: { hideEyebrow?: boolean }) {
           <InfoH2>4. Soundtrack and media licenses</InfoH2>
           <p>
             Recommended tracks come from Marryo’s curated library (currently Mixkit Free License
-            material). Catalog music may be used inside your exported film under those license terms.
+            material). Catalog music may be used inside your exported short film under those license terms.
             You may not redistribute soundtrack files as standalone music products.
           </p>
         </section>
@@ -292,7 +292,7 @@ export function PrivacyPanel({ hideEyebrow = false }: { hideEyebrow?: boolean })
           <InfoH2>5. Retention &amp; choices</InfoH2>
           <p>
             When you finish a session (confirm color grade), we delete uploaded source clips and
-            unused soundtrack remuxes. We retain the muted before/after grade pair and the film you
+            unused soundtrack remuxes. We retain the muted before/after grade pair and the short film you
             selected. Projects remain until deleted by you. Keep original camera files — Marryo is
             not your only backup.
           </p>
@@ -302,12 +302,349 @@ export function PrivacyPanel({ hideEyebrow = false }: { hideEyebrow?: boolean })
   );
 }
 
+const PIPELINE_GRID = [
+  { n: "01", title: "Sign in", body: "Google OAuth via Auth.js" },
+  { n: "02", title: "Brief", body: "Names, mood, length, orientation" },
+  { n: "03", title: "Upload", body: "Clips to Cloud Storage" },
+  { n: "04", title: "Validate", body: "OpenCV brightness · sharpness · faces" },
+  { n: "05", title: "People", body: "MediaPipe clusters · bride / groom" },
+  { n: "06", title: "Scenes", body: "PySceneDetect shot boundaries" },
+  { n: "07", title: "Director", body: "ADK + Gemini + ClickHouse scores" },
+  { n: "08", title: "Render", body: "FFmpeg picture lock + cards" },
+  { n: "09", title: "Sound", body: "Top catalog tracks scored to the cut" },
+  { n: "10", title: "Grade", body: "Before / after color compare" },
+  { n: "11", title: "Short film", body: "Preview and download" },
+] as const;
+
+const HAPPY_PATH = [
+  "Sign in",
+  "Brief",
+  "Upload",
+  "Validate",
+  "People",
+  "Scenes",
+  "Director",
+  "Render",
+  "Sound",
+  "Grade",
+  "Short film",
+] as const;
+
+const MOMENT_FLOW = [
+  "Analyze moment",
+  "Apply theme weights",
+  "quality_score",
+  "ClickHouse",
+  "Director picks for EDL",
+] as const;
+
+const MOMENT_FACTORS = [
+  { title: "Couple", body: "Both / one / none in frame — highest weight for romantic" },
+  { title: "Emotion", body: "Match to theme-positive emotions (joy, tender, love…)" },
+  { title: "Visual quality", body: "High / medium / low from analysis" },
+  { title: "Lighting", body: "Bonus for golden hour, soft, warm, etc." },
+  { title: "Shot type", body: "Close-up / medium / wide / drone by theme" },
+  { title: "Duration", body: "Sweet-spot bonus (e.g. ~2–8s romantic)" },
+  { title: "Penalty", body: "Other people without the couple lowers the score" },
+] as const;
+
+const MUSIC_WEIGHTS = [
+  { w: "40%", title: "Mood", body: "Project mood vs track mood tags" },
+  { w: "30%", title: "Emotion", body: "Moment emotion histogram vs track tags" },
+  { w: "25%", title: "Tempo / energy", body: "BPM & energy vs cut density" },
+  { w: "5%", title: "Length", body: "Mild preference for usable source length" },
+] as const;
+
+const GRADE_TONES = [
+  {
+    title: "Cinematic",
+    body: "Slightly higher contrast, softer saturation, medium-contrast curves",
+  },
+  { title: "Natural", body: "No tone filter — picture stays as cut" },
+  {
+    title: "Bright",
+    body: "Lift brightness a touch; mild contrast and saturation bump",
+  },
+] as const;
+
+const GRADE_MOODS = [
+  { title: "Warm", body: "Push reds / greens, pull blues — golden cast" },
+  { title: "Romantic", body: "Stronger red lift, soft cool cut — rose warmth" },
+  { title: "Cool", body: "Pull reds, add blue — cooler venue look" },
+  { title: "Neutral", body: "No mood colorbalance — cards use default ink" },
+] as const;
+
+const STUDIO_STEPS = ["Footage", "People", "Direct", "Sound", "Grade", "Short film"] as const;
+
+/** Full pipeline + scoring UI — between Tutorial and Tech stack. */
+export function PipelinePanel({ hideEyebrow = false }: { hideEyebrow?: boolean }) {
+  return (
+    <div className="space-y-14">
+      <div>
+        <InfoTitle
+          eyebrow="Pipeline"
+          title="From upload to short film"
+          updated="7 Sep 2026"
+          hideEyebrow={hideEyebrow}
+        />
+        <InfoLead>
+          How Marryo validates footage, scores moments, directs a cut, picks music, and applies
+          color grade — for demos and walkthroughs.
+        </InfoLead>
+        <nav className="mt-8 flex flex-wrap gap-x-6 gap-y-2 border-b border-ink/10 pb-5 text-sm">
+          <a href="#pipeline-flow" className="text-ink-muted transition hover:text-ink">
+            Flow
+          </a>
+          <a href="#pipeline-moments" className="text-ink-muted transition hover:text-ink">
+            Moment scoring
+          </a>
+          <a href="#pipeline-sound" className="text-ink-muted transition hover:text-ink">
+            Soundtrack scoring
+          </a>
+          <a href="#pipeline-grade" className="text-ink-muted transition hover:text-ink">
+            Color grading
+          </a>
+          <a href="#pipeline-studio" className="text-ink-muted transition hover:text-ink">
+            Studio steps
+          </a>
+        </nav>
+      </div>
+
+      <section id="pipeline-flow" className="scroll-mt-28 space-y-8">
+        <div>
+          <h2 className="font-display text-2xl tracking-[-0.02em] text-ink">
+            Flow
+          </h2>
+          <p className="mt-3 max-w-xl text-sm leading-relaxed text-ink-muted sm:text-base">
+            Rejected clips loop back to upload. Kept clips continue into people, directing, sound,
+            grade, and the finished short film.
+          </p>
+        </div>
+
+        <ol className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {PIPELINE_GRID.map((step) => (
+            <li
+              key={step.n}
+              className="border border-ink/10 bg-ivory/50 px-4 py-4"
+            >
+              <p className="mono-readout text-[10px] tracking-[0.16em] text-bronze">{step.n}</p>
+              <p className="mt-2 text-sm font-medium text-ink">{step.title}</p>
+              <p className="mt-1 text-xs leading-relaxed text-ink-muted">{step.body}</p>
+            </li>
+          ))}
+        </ol>
+
+        <div className="overflow-x-auto border border-ink/10 bg-film px-4 py-5 text-ivory">
+          <p className="mono-readout text-[10px] tracking-[0.16em] text-ivory/45 uppercase">
+            Marryo path
+          </p>
+          <div className="mt-4 flex min-w-max items-center gap-2 text-xs sm:text-sm">
+            {HAPPY_PATH.map((label, i) => (
+              <div key={label} className="flex items-center gap-2">
+                <span className="whitespace-nowrap border border-ivory/20 bg-ivory/5 px-3 py-2">
+                  {label}
+                </span>
+                {i < HAPPY_PATH.length - 1 ? (
+                  <span aria-hidden className="text-bronze">
+                    →
+                  </span>
+                ) : null}
+              </div>
+            ))}
+          </div>
+          <p className="mt-4 text-xs text-ivory/50">
+            Validate → Rejected returns to Upload · Kept advances to People
+          </p>
+        </div>
+      </section>
+
+      <section id="pipeline-moments" className="scroll-mt-28 space-y-8 border-t border-ink/10 pt-12">
+        <div>
+          <h2 className="font-display text-2xl tracking-[-0.02em] text-ink">
+            Moment scoring
+          </h2>
+          <p className="mt-3 max-w-xl text-sm leading-relaxed text-ink-muted sm:text-base">
+            Deterministic scores (0–100) from <span className="text-ink">scoring.json</span> by
+            theme — romantic, cinematic, or fun. Results land in ClickHouse as{" "}
+            <span className="text-ink">moment_scores</span>; the Film Director prefers
+            higher-scoring moments for the EDL.
+          </p>
+        </div>
+
+        <div className="flex flex-col gap-3 border border-ink/10 bg-ivory/45 px-5 py-5 sm:flex-row sm:flex-wrap sm:items-center">
+          {MOMENT_FLOW.map((label, i) => (
+            <div key={label} className="flex items-center gap-3">
+              <span className="text-sm text-ink">{label}</span>
+              {i < MOMENT_FLOW.length - 1 ? (
+                <span aria-hidden className="hidden text-bronze sm:inline">
+                  →
+                </span>
+              ) : null}
+            </div>
+          ))}
+        </div>
+
+        <ul className="grid gap-4 sm:grid-cols-2">
+          {MOMENT_FACTORS.map((f) => (
+            <li key={f.title} className="border-l-2 border-bronze/40 pl-4">
+              <p className="text-sm font-medium text-ink">{f.title}</p>
+              <p className="mt-1 text-xs leading-relaxed text-ink-muted sm:text-sm">{f.body}</p>
+            </li>
+          ))}
+        </ul>
+
+        <p className="text-xs leading-relaxed text-ink-muted sm:text-sm">
+          Footage Kept / Rejected on upload is a separate pass/fail (OpenCV checks) — not this
+          0–100 moment score.
+        </p>
+      </section>
+
+      <section id="pipeline-sound" className="scroll-mt-28 space-y-8 border-t border-ink/10 pt-12">
+        <div>
+          <h2 className="font-display text-2xl tracking-[-0.02em] text-ink">
+            Soundtrack scoring
+          </h2>
+          <p className="mt-3 max-w-xl text-sm leading-relaxed text-ink-muted sm:text-base">
+            After the picture lock, Marryo builds music features from the cut (mood, emotion
+            histogram, cut density), scores every catalog track, and surfaces the top five.
+          </p>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {MUSIC_WEIGHTS.map((item) => (
+            <div
+              key={item.title}
+              className="border border-ink/10 bg-ivory/50 px-4 py-5 text-center"
+            >
+              <p className="font-display text-3xl tracking-[-0.03em] text-bronze">{item.w}</p>
+              <p className="mt-3 text-sm font-medium text-ink">{item.title}</p>
+              <p className="mt-1 text-xs leading-relaxed text-ink-muted">{item.body}</p>
+            </div>
+          ))}
+        </div>
+
+        <div className="border border-ink/10 bg-film px-4 py-5 text-ivory">
+          <p className="mono-readout text-[10px] tracking-[0.16em] text-ivory/45 uppercase">
+            Track score
+          </p>
+          <p className="mt-3 font-display text-lg text-ivory/90 sm:text-xl">
+            0.40·mood + 0.30·emotion + 0.25·tempo + 0.05·length
+          </p>
+          <p className="mt-3 text-xs text-ivory/50">
+            Sorted descending → top 5 remixed onto the picture → pick or auto-select
+          </p>
+        </div>
+      </section>
+
+      <section id="pipeline-grade" className="scroll-mt-28 space-y-8 border-t border-ink/10 pt-12">
+        <div>
+          <h2 className="font-display text-2xl tracking-[-0.02em] text-ink">
+            Color grading
+          </h2>
+          <p className="mt-3 max-w-xl text-sm leading-relaxed text-ink-muted sm:text-base">
+            After the silent picture is cut, FFmpeg applies a grade from{" "}
+            <span className="text-ink">render_presets.json</span>:{" "}
+            <span className="text-ink">visual_tone</span> filters first, then{" "}
+            <span className="text-ink">mood</span> colorbalance. An ungraded twin is kept so the
+            Grade step can compare before and after.
+          </p>
+        </div>
+
+        <div className="flex flex-col gap-3 border border-ink/10 bg-ivory/45 px-5 py-5 sm:flex-row sm:flex-wrap sm:items-center">
+          {[
+            "Picture lock",
+            "Tone vf",
+            "Mood colorbalance",
+            "Graded + ungraded twins",
+            "Compare → confirm",
+          ].map((label, i, arr) => (
+            <div key={label} className="flex items-center gap-3">
+              <span className="text-sm text-ink">{label}</span>
+              {i < arr.length - 1 ? (
+                <span aria-hidden className="hidden text-bronze sm:inline">
+                  →
+                </span>
+              ) : null}
+            </div>
+          ))}
+        </div>
+
+        <div>
+          <p className="text-sm font-medium text-ink">Visual tone</p>
+          <ul className="mt-4 grid gap-4 sm:grid-cols-3">
+            {GRADE_TONES.map((item) => (
+              <li key={item.title} className="border border-ink/10 bg-ivory/50 px-4 py-4">
+                <p className="text-sm font-medium text-ink">{item.title}</p>
+                <p className="mt-1 text-xs leading-relaxed text-ink-muted">{item.body}</p>
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        <div>
+          <p className="text-sm font-medium text-ink">Mood cast</p>
+          <ul className="mt-4 grid gap-4 sm:grid-cols-2">
+            {GRADE_MOODS.map((item) => (
+              <li key={item.title} className="border-l-2 border-bronze/40 pl-4">
+                <p className="text-sm font-medium text-ink">{item.title}</p>
+                <p className="mt-1 text-xs leading-relaxed text-ink-muted sm:text-sm">
+                  {item.body}
+                </p>
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        <div className="border border-ink/10 bg-film px-4 py-5 text-ivory">
+          <p className="mono-readout text-[10px] tracking-[0.16em] text-ivory/45 uppercase">
+            Before / after
+          </p>
+          <p className="mt-3 text-sm leading-relaxed text-ivory/85">
+            Before = ungraded stitch · After = tone + mood filters on the same cut. Title/ending
+            card colors also follow the mood preset. Confirming grade keeps the graded short film as the
+            session output.
+          </p>
+        </div>
+      </section>
+
+      <section id="pipeline-studio" className="scroll-mt-28 space-y-8 border-t border-ink/10 pt-12">
+        <div>
+          <h2 className="font-display text-2xl tracking-[-0.02em] text-ink">
+            Studio steps
+          </h2>
+          <p className="mt-3 max-w-xl text-sm leading-relaxed text-ink-muted sm:text-base">
+            What the user sees in the step rail — completed steps stay open for read-only review.
+          </p>
+        </div>
+
+        <ol className="flex flex-wrap items-center gap-2">
+          {STUDIO_STEPS.map((label, i) => (
+            <li key={label} className="flex items-center gap-2">
+              <span className="border border-ink/15 bg-ivory/60 px-3 py-2 text-sm text-ink">
+                <span className="mono-readout mr-2 text-[10px] text-bronze">
+                  {String(i + 1).padStart(2, "0")}
+                </span>
+                {label}
+              </span>
+              {i < STUDIO_STEPS.length - 1 ? (
+                <span aria-hidden className="text-ink-muted/50">
+                  —
+                </span>
+              ) : null}
+            </li>
+          ))}
+        </ol>
+      </section>
+    </div>
+  );
+}
+
 export function TechStackPanel({ hideEyebrow = false }: { hideEyebrow?: boolean }) {
   const layers = [
     {
       title: "Interface & API",
       items: [
-        { name: "Next.js 16 + React 19", note: "Studio UI and route handlers on :3100" },
+        { name: "Next.js 16 + React 19", note: "Studio UI and route handlers" },
         { name: "Auth.js (Google)", note: "Studio gated behind sign-in" },
         { name: "Tailwind CSS 4", note: "Design tokens, studio + homepage shell" },
       ],

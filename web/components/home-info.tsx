@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { BeginFilmButton } from "@/components/begin-film";
 import {
   AboutPanel,
+  PipelinePanel,
   PrivacyPanel,
   TechStackPanel,
   TermsPanel,
@@ -16,6 +17,7 @@ const NAV = [
   { hash: "tutorial", label: "Tutorial" },
   { hash: "terms", label: "Terms and conditions" },
   { hash: "privacy", label: "Privacy policy" },
+  { hash: "pipeline", label: "Pipeline" },
   { hash: "tech", label: "Tech stack" },
 ] as const;
 
@@ -25,6 +27,12 @@ export function isInfoHash(value: string): value is HashId {
   return NAV.some((item) => item.hash === value);
 }
 
+/** True for main info hashes and in-panel anchors (e.g. pipeline-flow). */
+export function isInfoSectionHash(value: string): boolean {
+  if (isInfoHash(value)) return true;
+  return value.startsWith("pipeline-");
+}
+
 function isHashId(value: string): value is HashId {
   return isInfoHash(value);
 }
@@ -32,7 +40,10 @@ function isHashId(value: string): value is HashId {
 function readHash(): HashId {
   if (typeof window === "undefined") return "about";
   const raw = window.location.hash.replace(/^#/, "");
-  return isHashId(raw) ? raw : "about";
+  if (isHashId(raw)) return raw;
+  // Sub-nav inside Pipeline must not leave the panel or unhide Featured short films.
+  if (raw.startsWith("pipeline-")) return "pipeline";
+  return "about";
 }
 
 function Panel({
@@ -59,6 +70,8 @@ function Panel({
       return <TermsPanel hideEyebrow />;
     case "privacy":
       return <PrivacyPanel hideEyebrow />;
+    case "pipeline":
+      return <PipelinePanel hideEyebrow />;
     case "tech":
       return <TechStackPanel hideEyebrow />;
   }
@@ -67,7 +80,7 @@ function Panel({
 const eyebrowRowClass =
   "flex shrink-0 items-center border-b border-ink/8 px-6 pt-10 pb-5 text-[11px] tracking-[0.22em] text-ink-muted uppercase sm:px-8 lg:px-6";
 
-/** Homepage nested info: sidebar + hash panels (#tutorial #about #terms #privacy #tech). */
+/** Homepage nested info: sidebar + hash panels (#about #tutorial #terms #privacy #pipeline #tech). */
 export function HomeInfoSection({ googleConfigured = true }: { googleConfigured?: boolean }) {
   const [active, setActive] = useState<HashId>("about");
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -77,6 +90,15 @@ export function HomeInfoSection({ googleConfigured = true }: { googleConfigured?
     setActive(next);
     setMobileOpen(false);
     const raw = window.location.hash.replace(/^#/, "");
+    if (raw.startsWith("pipeline-")) {
+      // Wait for Pipeline panel to paint, then scroll to the sub-section.
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          document.getElementById(raw)?.scrollIntoView({ behavior: "smooth", block: "start" });
+        });
+      });
+      return;
+    }
     if (raw && isHashId(raw)) {
       requestAnimationFrame(() => {
         // Stable section id — do not bind id to `active` (SSR/HMR hydration mismatch).
@@ -154,7 +176,12 @@ export function HomeInfoSection({ googleConfigured = true }: { googleConfigured?
         <div className="flex min-w-0 flex-col bg-white">
           <div className={`${eyebrowRowClass} sm:px-10`}>{activeLabel}</div>
           <div className="px-6 py-8 sm:px-10 sm:py-10">
-            <div key={active} className="info-pane-enter max-w-2xl pb-12">
+            <div
+              key={active}
+              className={`info-pane-enter pb-12 ${
+                active === "pipeline" ? "max-w-5xl" : "max-w-2xl"
+              }`}
+            >
               <Panel id={active} googleConfigured={googleConfigured} />
             </div>
           </div>

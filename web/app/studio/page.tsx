@@ -69,7 +69,7 @@ function formatDayMonth(isoDate: string | null | undefined): string {
 function coupleLabel(project: ApiProjectSummary): string {
   const names = project.couple_names.map((c) => c.name).filter(Boolean);
   if (names.length >= 2) return `${names[0]} & ${names[1]}`;
-  return names[0] ?? project.film_title ?? "Untitled film";
+  return names[0] ?? project.film_title ?? "Untitled short film";
 }
 
 function stageLabel(stage: string, status: string): string {
@@ -83,7 +83,7 @@ function stageLabel(stage: string, status: string): string {
     rendering: "Direct",
     soundtrack: "Soundtrack",
     grading: "Grade",
-    ready: "Film",
+    ready: "Short film",
   };
   return map[stage] ?? stage;
 }
@@ -180,14 +180,14 @@ export default function StudioDashboardPage() {
   }
 
   return (
-    <StudioChrome title="Dashboard" subtitle="Your films">
+    <StudioChrome title="Dashboard" subtitle="Your short films">
       <div className="animate-fade grid gap-12 lg:grid-cols-[1.05fr_0.95fr]">
         <section className="space-y-5">
           <div className="flex flex-wrap items-end justify-between gap-3 border-b border-ink/10 pb-4">
             <div>
               <p className="text-[11px] tracking-[0.2em] text-ink-muted uppercase">Projects</p>
               <h2 className="font-display mt-1 text-2xl tracking-[-0.02em] text-ink">
-                Films you’ve started
+                Short films you’ve started
               </h2>
             </div>
             <p className="mono-readout text-xs text-ink-muted">
@@ -201,7 +201,7 @@ export default function StudioDashboardPage() {
             <p className="text-sm text-ink-muted">Loading your projects…</p>
           ) : projects.length === 0 ? (
             <div className="border border-dashed border-ink/15 bg-white/40 px-5 py-10 text-sm text-ink-muted">
-              No films yet. Create your first project on the right — footage is added after setup.
+              No short films yet. Create your first project on the right — footage is added after setup.
             </div>
           ) : (
             <ul className="divide-y divide-ink/8 border-y border-ink/8">
@@ -231,7 +231,7 @@ export default function StudioDashboardPage() {
         </section>
 
         <section id="new" className="scroll-mt-8 border border-ink/10 bg-white/45 px-5 py-6 backdrop-blur-sm sm:px-6">
-          <p className="text-[11px] tracking-[0.2em] text-ink-muted uppercase">New film</p>
+          <p className="text-[11px] tracking-[0.2em] text-ink-muted uppercase">New short film</p>
           <h2 className="font-display mt-1 text-2xl tracking-[-0.02em] text-ink">Begin a project</h2>
           <p className="mt-2 text-sm leading-relaxed text-ink-muted">
             Set couple details and creative prefs. Upload footage on the next step — video is never
