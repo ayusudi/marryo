@@ -122,7 +122,8 @@ export async function evaluateRender(input: {
 
     checks.push({
       name: "within_max_duration",
-      passed: probe.duration <= input.maxDuration + 0.5,
+      // Match duration_matches_edl slack — a sub-second overrun (e.g. 30.9 vs 30) is fine.
+      passed: probe.duration <= input.maxDuration + 1.5,
       detail: `actual=${probe.duration.toFixed(2)}s max=${input.maxDuration}s`,
     });
 

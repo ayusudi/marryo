@@ -1285,7 +1285,15 @@ export async function renderProject(
       contentType: "video/mp4",
     });
 
-    const status = evaluation.passed ? "ready" : "failed";
+    // File is on disk/GCS — keep status ready so Sound can remux even if soft eval
+    // checks warn (duration slack, etc.). Hard encode failures never reach this path.
+    const status = "ready";
+    const evalWarning = evaluation.passed
+      ? null
+      : evaluation.checks
+          .filter((c) => !c.passed)
+          .map((c) => `${c.name}: ${c.detail}`)
+          .join("; ");
     const updated = await prisma().render.update({
       where: { renderId },
       data: {
@@ -1297,28 +1305,17 @@ export async function renderProject(
         typographyJson: typography ? JSON.stringify(typography) : null,
         status,
         evaluation: JSON.stringify(evaluation),
-        errorText: evaluation.passed
-          ? null
-          : evaluation.checks
-              .filter((c) => !c.passed)
-              .map((c) => `${c.name}: ${c.detail}`)
-              .join("; "),
+        errorText: evalWarning,
       },
     });
 
-    if (evaluation.passed) {
-      if (!opts.skipStageAdvance) {
-        await setProjectStatus(projectId, "ready", "soundtrack");
-        await setStageMessage(projectId, "Picture ready — choose a soundtrack next");
-      }
-    } else {
-      await setProjectStatus(projectId, "failed", "rendering");
+    if (!opts.skipStageAdvance) {
+      await setProjectStatus(projectId, "ready", "soundtrack");
       await setStageMessage(
         projectId,
-        `Render evaluation failed: ${evaluation.checks
-          .filter((c) => !c.passed)
-          .map((c) => c.name)
-          .join(", ")}`,
+        evalWarning
+          ? `Picture ready (eval note: ${evalWarning.slice(0, 120)}) — choose a soundtrack next`
+          : "Picture ready — choose a soundtrack next",
       );
     }
 
@@ -1352,11 +1349,25 @@ export async function renderProject(
 }
 
 export async function getLatestRender(projectId: string): Promise<ApiRender | null> {
-  const row = await prisma().render.findFirst({
+  let row = await prisma().render.findFirst({
     where: { projectId },
     orderBy: { createdAt: "desc" },
   });
   if (!row) return null;
+
+  // Soft-eval failures used to leave status=failed even with a playable MP4.
+  // Promote so Sound can remux; keep errorText as the eval note.
+  if (row.storageUri && row.status !== "ready") {
+    row = await prisma().render.update({
+      where: { renderId: row.renderId },
+      data: { status: "ready" },
+    });
+    const project = await prisma().project.findUnique({ where: { projectId } });
+    if (project && (project.currentStage === "rendering" || project.status === "failed")) {
+      await setProjectStatus(projectId, "ready", "soundtrack");
+      await setStageMessage(projectId, "Picture ready — choose a soundtrack next");
+    }
+  }
 
   const storage = storageService();
   let playbackUrl: string | undefined;

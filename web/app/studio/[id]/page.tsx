@@ -1043,18 +1043,27 @@ function PipelineStep({
       if (cancelRef.current) return;
       setRender(rendered);
       onJournal({ render: rendered });
-      if (rendered.status !== "ready") {
+      // Usable picture wins over soft eval warnings (e.g. 30.9s vs 30s max).
+      if (!rendered.playback_url && rendered.status !== "ready") {
         throw new ApiError(rendered.error_text || "Render did not succeed", 500);
+      }
+      if (rendered.error_text) {
+        onError(rendered.error_text);
       }
 
       setPhase("done");
       const secs = Math.max(1, Math.round((Date.now() - startedAt) / 1000));
-      setMessage(`Picture ready · took about ${secs}s`);
+      setMessage(
+        rendered.playback_url
+          ? `Picture ready · took about ${secs}s`
+          : `Picture locked · took about ${secs}s`,
+      );
       setStageHint(null);
       // Wait for an explicit Continue click — do not auto-advance to Sound.
     } catch (err) {
       if (cancelRef.current) return;
-      setPhase("idle");
+      // Keep any picture we already got so Continue to Sound stays available.
+      setPhase((prev) => (prev === "done" ? prev : "idle"));
       setMessage("Something stopped the pipeline.");
       setStageHint(null);
       onError(err instanceof ApiError ? err.message : "Pipeline failed");
@@ -1066,35 +1075,37 @@ function PipelineStep({
   useEffect(() => {
     if (startedRef.current) return;
     startedRef.current = true;
-    if (readOnly) {
-      void (async () => {
-        setPending(true);
-        setMessage("Loading picture…");
-        try {
-          const rendered = await getLatestRender(project.project_id);
-          setRender(rendered);
-          onJournal({ render: rendered });
+    void (async () => {
+      // Prefer an existing picture lock over re-running Direct.
+      try {
+        const existing = await getLatestRender(project.project_id);
+        if (existing.playback_url || existing.status === "ready") {
+          setRender(existing);
+          onJournal({ render: existing });
           setPhase("done");
           setMessage("Picture lock");
-          if (rendered.duration != null) {
+          if (existing.duration != null) {
             setSceneSummary(
-              `Picture-locked cut · ${rendered.duration.toFixed(1)}s · ${rendered.orientation}${
-                rendered.evaluation
-                  ? ` · eval ${rendered.evaluation.passed ? "passed" : "failed"}`
+              `Picture-locked cut · ${existing.duration.toFixed(1)}s · ${existing.orientation}${
+                existing.evaluation
+                  ? ` · eval ${existing.evaluation.passed ? "passed" : "note"}`
                   : ""
               }`,
             );
           }
-        } catch (err) {
-          onError(err instanceof ApiError ? err.message : "Could not load picture render");
-          setPhase("idle");
-        } finally {
-          setPending(false);
+          if (existing.error_text && !readOnly) onError(existing.error_text);
+          return;
         }
-      })();
-      return;
-    }
-    void run();
+      } catch {
+        /* no prior render — fall through */
+      }
+      if (readOnly) {
+        onError("Could not load picture render");
+        setPhase("idle");
+        return;
+      }
+      await run();
+    })();
   }, [onError, onJournal, project.project_id, readOnly, run]);
 
   const phaseComplete = phase === "done";
@@ -1196,23 +1207,16 @@ function PipelineStep({
             >
               Cancel
             </GhostButton>
-          ) : phaseComplete && hasPicture ? (
-            <PrimaryButton onClick={() => void onDone()}>Continue to Sound</PrimaryButton>
+          ) : hasPicture ? (
+            <>
+              <PrimaryButton onClick={() => void onDone()}>Continue to Sound</PrimaryButton>
+              <GhostButton onClick={() => void run()}>Run again</GhostButton>
+            </>
           ) : (
             <PrimaryButton onClick={() => void run()}>
               {cancelled || phase === "idle" ? "Direct & render" : "Run again"}
             </PrimaryButton>
           )}
-          {phaseComplete && hasPicture && !pending ? (
-            <GhostButton
-              onClick={() => {
-                startedRef.current = false;
-                void run();
-              }}
-            >
-              Run again
-            </GhostButton>
-          ) : null}
           {pending ? (
             <p className="self-center text-sm text-ink-muted">Working…</p>
           ) : null}
@@ -1331,19 +1335,23 @@ function SoundtrackStep({
     }
   }
 
+  const scoring = pending || !session;
+
   return (
     <div className="space-y-8">
       <p className="max-w-xl text-ink-muted">
         {readOnly
           ? "Preview soundtrack options used for this short film. Selection is locked in review."
-          : "Preview all seven options, then save the one you want. Nothing is locked until you choose."}
+          : scoring
+            ? "Scoring catalog tracks against your picture lock. Choices appear when versions are ready."
+            : "Preview all seven options, then save the one you want. Nothing is locked until you choose."}
       </p>
 
-      {pending && !session ? (
+      {scoring ? (
         <ProcessingMotion label="Scoring music and building versions…" orientation={orientation} />
       ) : null}
 
-      {previewUrl ? (
+      {!scoring && previewUrl ? (
         <div className="animate-focus space-y-3">
           <FilmPlayer
             key={`${previewMode}-${focused?.version_id ?? "picture"}`}
@@ -1361,97 +1369,101 @@ function SoundtrackStep({
         </div>
       ) : null}
 
-      <div>
-        <p className="mb-3 text-[11px] tracking-[0.18em] text-ink-muted uppercase">
-          5 recommended tracks
-        </p>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-          {versions.map((v) => {
-            const active = previewMode === "catalog" && v.version_id === focused?.version_id;
-            return (
+      {!scoring ? (
+        <>
+          <div>
+            <p className="mb-3 text-[11px] tracking-[0.18em] text-ink-muted uppercase">
+              5 recommended tracks
+            </p>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+              {versions.map((v) => {
+                const active = previewMode === "catalog" && v.version_id === focused?.version_id;
+                return (
+                  <button
+                    key={v.version_id}
+                    type="button"
+                    onClick={() => {
+                      setPreviewMode("catalog");
+                      setFocusId(v.version_id);
+                    }}
+                    className={`rounded-xl border px-3 py-4 text-left transition ${
+                      active
+                        ? "border-bronze bg-bronze/10"
+                        : "border-stone-line bg-ivory-deep/20 hover:border-ink/25"
+                    }`}
+                  >
+                    <p className="text-xs tracking-widest text-ink-muted uppercase">
+                      {String(v.rank).padStart(2, "0")}
+                      {v.score != null ? ` · ${v.score.toFixed(1)}` : ""}
+                    </p>
+                    <p className="mt-1 font-medium text-ink">{v.title}</p>
+                    {v.tags.length > 0 ? (
+                      <p className="mt-1 line-clamp-2 text-xs text-ink-muted">{v.tags.join(" · ")}</p>
+                    ) : null}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div>
+            <p className="mb-3 text-[11px] tracking-[0.18em] text-ink-muted uppercase">
+              Plus mute &amp; original
+            </p>
+            <div className="grid gap-3 sm:grid-cols-2">
               <button
-                key={v.version_id}
                 type="button"
-                onClick={() => {
-                  setPreviewMode("catalog");
-                  setFocusId(v.version_id);
-                }}
-                className={`rounded-xl border px-3 py-4 text-left transition ${
-                  active
+                onClick={() => setPreviewMode("mute")}
+                className={`rounded-xl border px-4 py-4 text-left transition ${
+                  previewMode === "mute"
                     ? "border-bronze bg-bronze/10"
                     : "border-stone-line bg-ivory-deep/20 hover:border-ink/25"
                 }`}
               >
-                <p className="text-xs tracking-widest text-ink-muted uppercase">
-                  {String(v.rank).padStart(2, "0")}
-                  {v.score != null ? ` · ${v.score.toFixed(1)}` : ""}
-                </p>
-                <p className="mt-1 font-medium text-ink">{v.title}</p>
-                {v.tags.length > 0 ? (
-                  <p className="mt-1 line-clamp-2 text-xs text-ink-muted">{v.tags.join(" · ")}</p>
-                ) : null}
+                <p className="font-medium text-ink">Mute</p>
+                <p className="mt-1 text-xs text-ink-muted">No music under the picture</p>
               </button>
-            );
-          })}
-        </div>
-      </div>
+              <button
+                type="button"
+                onClick={() => setPreviewMode("original")}
+                className={`rounded-xl border px-4 py-4 text-left transition ${
+                  previewMode === "original"
+                    ? "border-bronze bg-bronze/10"
+                    : "border-stone-line bg-ivory-deep/20 hover:border-ink/25"
+                }`}
+              >
+                <p className="font-medium text-ink">Original sound</p>
+                <p className="mt-1 text-xs text-ink-muted">Keep audio from your clips</p>
+              </button>
+            </div>
+          </div>
 
-      <div>
-        <p className="mb-3 text-[11px] tracking-[0.18em] text-ink-muted uppercase">
-          Plus mute &amp; original
-        </p>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <button
-            type="button"
-            onClick={() => setPreviewMode("mute")}
-            className={`rounded-xl border px-4 py-4 text-left transition ${
-              previewMode === "mute"
-                ? "border-bronze bg-bronze/10"
-                : "border-stone-line bg-ivory-deep/20 hover:border-ink/25"
-            }`}
-          >
-            <p className="font-medium text-ink">Mute</p>
-            <p className="mt-1 text-xs text-ink-muted">No music under the picture</p>
-          </button>
-          <button
-            type="button"
-            onClick={() => setPreviewMode("original")}
-            className={`rounded-xl border px-4 py-4 text-left transition ${
-              previewMode === "original"
-                ? "border-bronze bg-bronze/10"
-                : "border-stone-line bg-ivory-deep/20 hover:border-ink/25"
-            }`}
-          >
-            <p className="font-medium text-ink">Original sound</p>
-            <p className="mt-1 text-xs text-ink-muted">Keep audio from your clips</p>
-          </button>
-        </div>
-      </div>
-
-      {!readOnly ? (
-        <div className="flex flex-wrap gap-3">
-          <PrimaryButton
-            disabled={pending || saving || (previewMode === "catalog" && !focused)}
-            onClick={() => {
-              if (previewMode === "catalog" && focused) {
-                void saveChoice({
-                  mode: "catalog",
-                  version_id: focused.version_id,
-                  label: `Catalog · ${focused.title}`,
-                });
-              } else if (previewMode === "mute") {
-                void saveChoice({ mode: "mute", label: "Mute (no music)" });
-              } else {
-                void saveChoice({ mode: "original", label: "Original clip audio" });
-              }
-            }}
-          >
-            {saving ? "Saving…" : "Save this soundtrack"}
-          </PrimaryButton>
-          <GhostButton disabled={pending || saving} onClick={() => load(true)}>
-            Refresh versions
-          </GhostButton>
-        </div>
+          {!readOnly ? (
+            <div className="flex flex-wrap gap-3">
+              <PrimaryButton
+                disabled={saving || (previewMode === "catalog" && !focused)}
+                onClick={() => {
+                  if (previewMode === "catalog" && focused) {
+                    void saveChoice({
+                      mode: "catalog",
+                      version_id: focused.version_id,
+                      label: `Catalog · ${focused.title}`,
+                    });
+                  } else if (previewMode === "mute") {
+                    void saveChoice({ mode: "mute", label: "Mute (no music)" });
+                  } else {
+                    void saveChoice({ mode: "original", label: "Original clip audio" });
+                  }
+                }}
+              >
+                {saving ? "Saving…" : "Save this soundtrack"}
+              </PrimaryButton>
+              <GhostButton disabled={saving} onClick={() => load(true)}>
+                Refresh versions
+              </GhostButton>
+            </div>
+          ) : null}
+        </>
       ) : null}
     </div>
   );
