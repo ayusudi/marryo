@@ -204,12 +204,12 @@ export default function StudioDashboardPage() {
               No short films yet. Create your first project on the right — footage is added after setup.
             </div>
           ) : (
-            <ul className="divide-y divide-ink/8 border-y border-ink/8">
+            <ul className="divide-y divide-ink/8">
               {projects.map((project) => (
-                <li key={project.project_id}>
+                <li className="border border-ink/8" key={project.project_id}>
                   <Link
                     href={`/studio/${project.project_id}`}
-                    className="flex flex-wrap items-center justify-between gap-3 py-4 transition hover:bg-white/40"
+                    className="flex flex-wrap items-center justify-between gap-3 p-4 transition hover:bg-white/40"
                   >
                     <div className="min-w-0">
                       <p className="truncate text-sm font-medium text-ink">{projectShortLabel(project)}</p>
