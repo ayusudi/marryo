@@ -218,13 +218,21 @@ export default function StudioProjectPage({ params }: { params: Promise<{ id: st
     0,
     STEPS.findIndex((s) => s.id === progressStep),
   );
-  const unlockedIds = STEPS.slice(0, progressIdx + 1).map((s) => s.id);
+  const stepIdx = Math.max(
+    0,
+    STEPS.findIndex((s) => s.id === step),
+  );
+  // Always unlock the step the user is on (continue advances UI before stage catches up).
+  const unlockedIds = Array.from(
+    new Set([...STEPS.slice(0, progressIdx + 1).map((s) => s.id), step]),
+  );
+  // Past steps are review-only; the current frontier and the just-continued next step stay editable.
   const readOnly =
     forceEdit && step === "soundtrack"
       ? false
       : progressStep === "complete"
         ? step !== "complete"
-        : step !== progressStep;
+        : stepIdx < progressIdx;
 
   const goToStep = useCallback((id: string) => {
     if (!STEPS.some((s) => s.id === id)) return;
@@ -358,7 +366,10 @@ export default function StudioProjectPage({ params }: { params: Promise<{ id: st
             readOnly={readOnly}
             onError={setError}
             onProjectChange={setProject}
-            onJournal={(extra) => setJournalExtras((prev) => ({ ...prev, ...extra }))}
+            onJournal={(extra) => {
+              // Defer so PipelineStep never calls setState on the parent during its own render/updater.
+              queueMicrotask(() => setJournalExtras((prev) => ({ ...prev, ...extra })));
+            }}
             onDone={async () => {
               await refresh();
               setStep("soundtrack");
@@ -371,7 +382,9 @@ export default function StudioProjectPage({ params }: { params: Promise<{ id: st
             orientation={project.orientation}
             readOnly={readOnly}
             onError={setError}
-            onJournal={(label) => setJournalExtras((prev) => ({ ...prev, soundtrackLabel: label }))}
+            onJournal={(label) => {
+              queueMicrotask(() => setJournalExtras((prev) => ({ ...prev, soundtrackLabel: label })));
+            }}
             onDone={async () => {
               setForceEdit(false);
               await refresh();
@@ -676,39 +689,44 @@ function IdentityStep({
   const [groomId, setGroomId] = useState<string | null>(project.groom_person_id);
   const [ran, setRan] = useState(false);
   const startedRef = useRef(false);
+  /** User left People while identify was still running — ignore late results. */
+  const leftStepRef = useRef(false);
+
+  const continueWithoutLabels = useCallback(async () => {
+    leftStepRef.current = true;
+    await confirmIdentity(project.project_id, {
+      bride_person_id: null,
+      groom_person_id: null,
+    });
+    await onDone();
+  }, [onDone, project.project_id]);
 
   const runIdentify = useCallback(() => {
     if (readOnly) return;
+    leftStepRef.current = false;
     onError(null);
     startTransition(async () => {
       try {
         const result = await identifyProject(project.project_id);
+        if (leftStepRef.current) return;
         const list = result.persons ?? [];
         setPersons(list);
         setRan(true);
         if (result.warnings?.length) onError(result.warnings.join(" · "));
-
-        // Happy path: 0 people → skip; 1–2 people → auto-label and continue.
-        if (list.length === 0) {
-          await onSkip();
-          return;
-        }
-        if (list.length <= 2) {
-          const autoBride = list[0]?.person_id ?? null;
-          const autoGroom = list[1]?.person_id ?? null;
-          setBrideId(autoBride);
-          setGroomId(autoGroom);
-          await confirmIdentity(project.project_id, {
-            bride_person_id: autoBride,
-            groom_person_id: autoGroom,
-          });
-          await onDone();
+        // Pre-select when 1–2 clusters, but wait for an explicit Continue click.
+        if (list.length === 1) {
+          setBrideId(list[0]?.person_id ?? null);
+          setGroomId(null);
+        } else if (list.length === 2) {
+          setBrideId(list[0]?.person_id ?? null);
+          setGroomId(list[1]?.person_id ?? null);
         }
       } catch (err) {
+        if (leftStepRef.current) return;
         onError(err instanceof ApiError ? err.message : "Identify failed");
       }
     });
-  }, [onDone, onError, onSkip, project.project_id, readOnly]);
+  }, [onError, project.project_id, readOnly]);
 
   useEffect(() => {
     if (startedRef.current) return;
@@ -732,10 +750,6 @@ function IdentityStep({
 
   function confirm() {
     if (readOnly) return;
-    if (!brideId && !groomId) {
-      onError("Select at least one person as bride or groom.");
-      return;
-    }
     onError(null);
     startTransition(async () => {
       try {
@@ -746,6 +760,18 @@ function IdentityStep({
         await onDone();
       } catch (err) {
         onError(err instanceof ApiError ? err.message : "Could not confirm identity");
+      }
+    });
+  }
+
+  function skipLabels() {
+    if (readOnly) return;
+    onError(null);
+    startTransition(async () => {
+      try {
+        await continueWithoutLabels();
+      } catch (err) {
+        onError(err instanceof ApiError ? err.message : "Could not continue");
       }
     });
   }
@@ -761,6 +787,11 @@ function IdentityStep({
       {pending && persons.length === 0 ? (
         <div className="space-y-4">
           <ProcessingMotion label={readOnly ? "Loading people…" : "Finding people in your clips…"} />
+          {!readOnly ? (
+            <p className="text-sm text-ink-muted">
+              You can continue without waiting — labeling is optional.
+            </p>
+          ) : null}
         </div>
       ) : null}
 
@@ -768,7 +799,7 @@ function IdentityStep({
         <div className="rounded-2xl border border-bronze/25 bg-bronze/5 px-5 py-4 text-sm text-bronze-deep">
           {readOnly
             ? "No people were labeled for this project."
-            : "No distinct people were clustered from the kept footage. You can re-scan, skip, or upload clearer face-forward clips."}
+            : "No distinct people were clustered from the kept footage. You can continue to Direct, re-scan, or upload clearer face-forward clips."}
         </div>
       ) : null}
 
@@ -822,19 +853,33 @@ function IdentityStep({
         })}
       </div>
 
-      {!readOnly ? (
+      {readOnly ? (
         <div className="flex flex-wrap gap-3">
-          <PrimaryButton disabled={pending} onClick={confirm}>
-            Confirm people
-          </PrimaryButton>
-          <GhostButton disabled={pending} onClick={() => void onSkip()}>
-            Continue without
-          </GhostButton>
-          <GhostButton disabled={pending} onClick={runIdentify}>
+          <PrimaryButton onClick={() => void onSkip()}>Continue to Direct</PrimaryButton>
+        </div>
+      ) : (
+        <div className="flex flex-wrap gap-3">
+          {pending && !ran ? (
+            <PrimaryButton onClick={skipLabels}>Continue without</PrimaryButton>
+          ) : ran && persons.length === 0 ? (
+            <PrimaryButton disabled={pending} onClick={skipLabels}>
+              Continue to Direct
+            </PrimaryButton>
+          ) : (
+            <>
+              <PrimaryButton disabled={pending || !ran} onClick={confirm}>
+                Confirm people
+              </PrimaryButton>
+              <GhostButton disabled={pending || !ran} onClick={skipLabels}>
+                Continue without
+              </GhostButton>
+            </>
+          )}
+          <GhostButton disabled={pending && !ran} onClick={runIdentify}>
             Re-scan faces
           </GhostButton>
         </div>
-      ) : null}
+      )}
     </div>
   );
 }
@@ -977,20 +1022,19 @@ function PipelineStep({
       const theme = directed.theme?.trim() || null;
       const scored = directed.moments_scored ?? null;
       const analyzed = directed.moments_analyzed ?? null;
-      setSceneSummary((prev) => {
-        const storyBits = [
-          theme ? `Story theme: ${theme}` : null,
-          scored != null && analyzed != null
-            ? `Scored ${scored} of ${analyzed} moments for the cut`
-            : scored != null
-              ? `Scored ${scored} moments for the cut`
-              : null,
-        ].filter(Boolean);
-        if (!storyBits.length) return prev;
-        const next = [prev, storyBits.join(". ")].filter(Boolean).join(" ");
+      const storyBits = [
+        theme ? `Story theme: ${theme}` : null,
+        scored != null && analyzed != null
+          ? `Scored ${scored} of ${analyzed} moments for the cut`
+          : scored != null
+            ? `Scored ${scored} moments for the cut`
+            : null,
+      ].filter(Boolean);
+      if (storyBits.length) {
+        const next = [sceneLine, storyBits.join(". ")].filter(Boolean).join(" ");
+        setSceneSummary(next);
         onJournal({ sceneSummary: next });
-        return next;
-      });
+      }
 
       setPhase("render");
       setMessage(`Rendering ${orientation} picture…`);
@@ -1007,8 +1051,7 @@ function PipelineStep({
       const secs = Math.max(1, Math.round((Date.now() - startedAt) / 1000));
       setMessage(`Picture ready · took about ${secs}s`);
       setStageHint(null);
-      if (cancelRef.current) return;
-      await onDone();
+      // Wait for an explicit Continue click — do not auto-advance to Sound.
     } catch (err) {
       if (cancelRef.current) return;
       setPhase("idle");
@@ -1018,7 +1061,7 @@ function PipelineStep({
     } finally {
       setPending(false);
     }
-  }, [onDone, onError, onJournal, onProjectChange, orientation, project.orientation, project.project_id, readOnly]);
+  }, [onError, onJournal, onProjectChange, orientation, project.orientation, project.project_id, readOnly]);
 
   useEffect(() => {
     if (startedRef.current) return;
@@ -1153,11 +1196,23 @@ function PipelineStep({
             >
               Cancel
             </GhostButton>
+          ) : phaseComplete && hasPicture ? (
+            <PrimaryButton onClick={() => void onDone()}>Continue to Sound</PrimaryButton>
           ) : (
-            <PrimaryButton disabled={phaseComplete} onClick={() => void run()}>
+            <PrimaryButton onClick={() => void run()}>
               {cancelled || phase === "idle" ? "Direct & render" : "Run again"}
             </PrimaryButton>
           )}
+          {phaseComplete && hasPicture && !pending ? (
+            <GhostButton
+              onClick={() => {
+                startedRef.current = false;
+                void run();
+              }}
+            >
+              Run again
+            </GhostButton>
+          ) : null}
           {pending ? (
             <p className="self-center text-sm text-ink-muted">Working…</p>
           ) : null}

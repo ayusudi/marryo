@@ -515,9 +515,9 @@ paths:
       tags: [identity]
       summary: Confirm bride and/or groom person clusters
       description: |
-        At least one of `bride_person_id` or `groom_person_id` is required.
-        Omit or set the other to `null` for single-subject projects.
-        Advances `current_stage` to `identity` even when only one role is set.
+        Bride/groom labels are optional. Pass both as `null` (or omit) to continue
+        without people labels. If both roles are set they must be different person ids.
+        Advances `current_stage` to `identity`.
       operationId: confirmIdentity
       parameters:
         - $ref: "#/components/parameters/ProjectId"
@@ -738,14 +738,11 @@ components:
     ConfirmIdentityRequest:
       type: object
       description: |
-        Provide at least one role. If both are set they must be different person ids.
-        Unset roles are cleared to null on the project.
+        Optional bride/groom labels. Both may be null to continue without labeling.
+        If both are set they must be different person ids. Unset roles clear to null.
       properties:
         bride_person_id: { type: string, nullable: true }
         groom_person_id: { type: string, nullable: true }
-      anyOf:
-        - required: [bride_person_id]
-        - required: [groom_person_id]
     ConfirmIdentityResponse:
       type: object
       properties:

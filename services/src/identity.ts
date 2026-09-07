@@ -64,12 +64,7 @@ export const confirmIdentityInput = z
   .superRefine((value, ctx) => {
     const bride = value.bride_person_id;
     const groom = value.groom_person_id;
-    if (bride === null && groom === null) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "at least one of bride_person_id or groom_person_id is required",
-      });
-    }
+    // Bride/groom labels are optional — both null advances past People for an anonymous cut.
     if (bride !== null && groom !== null && bride === groom) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
