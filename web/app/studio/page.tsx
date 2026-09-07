@@ -204,7 +204,7 @@ export default function StudioDashboardPage() {
               No short films yet. Create your first project on the right — footage is added after setup.
             </div>
           ) : (
-            <ul className="divide-y divide-ink/8">
+            <ul className="divide-y divide-ink/8 flex flex-col gap-3">
               {projects.map((project) => (
                 <li className="border border-ink/8" key={project.project_id}>
                   <Link
