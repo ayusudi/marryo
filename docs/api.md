@@ -98,7 +98,7 @@ Reuse: calling POST again without `{ "force": true }` returns the existing sessi
 Choosing a soundtrack (or mute) upserts a `Film` row (`visibility=private` by default). Storage URI is permanent; APIs mint fresh signed `playback_url`s.
 
 - `GET /api/projects/:id/film` — project’s finished film + signed URL  
-- `GET /api/films/public` — `{ films: [...] }` where `visibility=public` (for landing)
+- `GET /api/films/public` — `{ films: [...] }` where `visibility=public` (legacy / optional). The landing gallery uses fixed GCS showcase clips in `web/lib/showcase-clips.ts` instead.
 
 Promote for landing (manual DB only):
 

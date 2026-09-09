@@ -3,16 +3,9 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { isInfoSectionHash } from "@/components/home-info";
+import type { ShowcaseClip } from "@/lib/showcase-clips";
 
-type PublicFilm = {
-  film_id: string;
-  title: string | null;
-  couple_label: string | null;
-  track_title: string | null;
-  playback_url?: string;
-  thumbnail_url?: string;
-  orientation: string | null;
-};
+type PublicFilm = ShowcaseClip;
 
 function useInfoHashOpen() {
   const [open, setOpen] = useState(false);
@@ -128,7 +121,7 @@ export function PublicFilmsGallery() {
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch("/api/films/public?limit=12", { cache: "no-store" });
+        const res = await fetch("/api/showcase", { cache: "no-store" });
         if (!res.ok) return;
         const data = (await res.json()) as { films?: PublicFilm[] };
         if (!cancelled) setFilms(data.films ?? []);
