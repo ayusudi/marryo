@@ -25,9 +25,12 @@ export async function GET() {
         );
         let thumbnail_url: string | undefined;
         if (meta.poster) {
+          const posterUri = showcaseGsUri(meta.poster);
           try {
-            const posterUri = showcaseGsUri(meta.poster);
-            if (await storage.objectExists(posterUri)) {
+            const exists = storage.objectExists
+              ? await storage.objectExists(posterUri)
+              : true;
+            if (exists) {
               thumbnail_url = await storage.getSignedUrl(posterUri, SIGN_TTL_SECONDS);
             }
           } catch {
