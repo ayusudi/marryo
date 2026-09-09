@@ -13,6 +13,7 @@ Built for the Agentic Cinema hackathon (Google ADK, Gemini, ClickHouse, FFmpeg, 
 - [What is Marryo](#what-is-marryo)
 - [Why you need Marryo](#why-you-need-marryo)
 - [Logic](#logic)
+  - [Agent & tool roster](#agent--tool-roster)
 - [Architecture](#architecture)
 - [Tech stack](#tech-stack)
 - [Getting started](#getting-started)
@@ -62,6 +63,28 @@ Studio flow:
 ![Ingest → Cut → Finish](docs/images/ingest-cut-finish.png)
 
 **Agent plans; tools execute.** Gemini describes moments; deterministic scoring ranks them in ClickHouse; `plan_edit` / `validate_edl` produce a valid EDL; FFmpeg stitches, grades, and remuxes audio.
+
+### Agent & tool roster
+
+Marryo uses a **single Google ADK Film Director** (`marryo_agent`) with focused tools. Deterministic CV and FFmpeg sit beside the agent so the model plans an **EDL** that can actually render.
+
+| # | Role | What it does | Stack |
+|---|------|----------------|-------|
+| 1 | **Film Director** (ADK root agent) | Orchestrates analyze → score → story → plan → validate for a project brief (couple, mood, visual tone, duration) | Google ADK + Gemini (Vertex AI) |
+| 2 | **`analyze_clip`** | Describes scenes/moments from footage (no invented scores) | Gemini |
+| 3 | **`query_candidate_moments`** | Pulls ranked candidates from analytics | ClickHouse via MCP / tools |
+| 4 | **`score_moments`** | Writes deterministic `quality_score` breakdowns | ClickHouse + scoring rules |
+| 5 | **`generate_story`** | Narrative beat structure for the cut | Gemini + ADK tool |
+| 6 | **`plan_edit`** | Drafts the **EDL** (order, in/out, cards) | Gemini + ADK tool |
+| 7 | **`validate_edl`** | Forced check: duration, variety, repetition — accept or revise | Deterministic validator |
+| 8 | **Footage validation** | Container / brightness / blur / faces; Kept vs rejected | OpenCV + FFmpeg (ffprobe) |
+| 9 | **People / identity** | Face clusters; optional bride/groom labels | MediaPipe |
+| 10 | **Scene detection** | Real shot boundaries into ClickHouse | PySceneDetect |
+| 11 | **Picture lock** | Trim, stitch, title/ending cards from validated EDL | FFmpeg + Pillow |
+| 12 | **Soundtrack** | Rank catalog tracks; remux top 5 / mute / original | Mixkit + FFmpeg |
+| 13 | **Color grade** | Apply grade; keep ungraded twin for compare / skip | FFmpeg presets |
+
+**Signature path:** `score_moments` → `plan_edit` → `validate_edl` → FFmpeg picture lock — agent plans, tools execute, couple chooses sound and grade.
 
 ---
 

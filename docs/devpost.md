@@ -4,6 +4,22 @@
 
 Live studio: [https://marryo.ayusudi.com](https://marryo.ayusudi.com) · Agent: [https://ai-marryo.ayusudi.com](https://ai-marryo.ayusudi.com)
 
+## Table of contents
+
+- [Inspiration](#inspiration)
+- [What it does](#what-it-does)
+- [How we built it](#how-we-built-it)
+  - [Agent & tool roster](#agent--tool-roster)
+  - [Building with ADK](#building-with-adk)
+- [How scoring works](#how-scoring-works)
+- [The Film Director in action](#the-film-director-in-action)
+- [Challenges we ran into](#challenges-we-ran-into)
+- [Accomplishments that we're proud of](#accomplishments-that-were-proud-of)
+- [What we learned](#what-we-learned)
+- [What's next for Marryo](#whats-next-for-marryo)
+- [Team / contributors](#team--contributors)
+- [Diagram index](#diagram-index)
+
 ---
 
 ## Inspiration
@@ -16,17 +32,21 @@ We wanted to be present. Capture the day. Still walk away with something worth k
 
 That’s the spark: **you live the moments; Marryo turns them into your story.**
 
+Live: [https://marryo.ayusudi.com](https://marryo.ayusudi.com)
+
 ---
 
 ## What it does
 
 Marryo is an AI pre-wedding **short film** studio. Couples upload a focused set of clips (up to 6), and Marryo produces a story cut with soundtrack and color grade — aimed at about a minute after upload.
 
+The Film Director (Google ADK + Gemini) plans an **EDL (Edit Decision List)** — a validated JSON cut plan of which moments to use, in what order, and for how long — then FFmpeg renders that plan into a picture-locked MP4.
+
 **Studio flow**
 
 1. **Footage** — upload and validate clips (container, brightness, sharpness, faces); only Kept clips continue
 2. **People** — MediaPipe face clusters; optional bride / groom labels
-3. **Direct** — scenes → moment scores → Film Director EDL → FFmpeg picture lock
+3. **Direct** — scenes → moment scores → Film Director drafts and validates an **EDL** → FFmpeg picture lock
 4. **Sound** — five scored catalog tracks, mute, or original (preview freely, then save)
 5. **Grade** — compare before / after color grade, confirm
 6. **Short film** — preview and download retained cuts
@@ -59,11 +79,33 @@ The Next.js API orchestrates the studio. The ADK agent owns storytelling: analyz
 
 We optimized Direct → soundtrack for roughly **&lt;1 minute**: clip caps, parallel scene detect/analyze, shared clip cache, parallel normalize + remux, and draft-friendly encode settings.
 
-### Building with Cursor + ADK
+### Agent & tool roster
 
-We developed the stack in Cursor (agentic coding, repo workflows, Cloud Run deploys) while iterating on the Film Director in the Google ADK web UI — briefing mood/tone options, then running tool traces end-to-end.
+Marryo uses a **single Google ADK Film Director** (`marryo_agent`) with focused tools. Deterministic CV and FFmpeg sit beside the agent so the model plans an **EDL** that can actually render.
 
-![Cursor workspace beside ADK Film Director chat](images/dev-cursor-and-adk.png)
+| # | Role | What it does | Stack |
+|---|------|----------------|-------|
+| 1 | **Film Director** (ADK root agent) | Orchestrates analyze → score → story → plan → validate for a project brief (couple, mood, visual tone, duration) | Google ADK + Gemini (Vertex AI) |
+| 2 | **`analyze_clip`** | Describes scenes/moments from footage (no invented scores) | Gemini |
+| 3 | **`query_candidate_moments`** | Pulls ranked candidates from analytics | ClickHouse via MCP / tools |
+| 4 | **`score_moments`** | Writes deterministic `quality_score` breakdowns | ClickHouse + scoring rules |
+| 5 | **`generate_story`** | Narrative beat structure for the cut | Gemini + ADK tool |
+| 6 | **`plan_edit`** | Drafts the **EDL** (order, in/out, cards) | Gemini + ADK tool |
+| 7 | **`validate_edl`** | Forced check: duration, variety, repetition — accept or revise | Deterministic validator |
+| 8 | **Footage validation** | Container / brightness / blur / faces; Kept vs rejected | OpenCV + FFmpeg (ffprobe) |
+| 9 | **People / identity** | Face clusters; optional bride/groom labels | MediaPipe |
+| 10 | **Scene detection** | Real shot boundaries into ClickHouse | PySceneDetect |
+| 11 | **Picture lock** | Trim, stitch, title/ending cards from validated EDL | FFmpeg + Pillow |
+| 12 | **Soundtrack** | Rank catalog tracks; remux top 5 / mute / original | Mixkit + FFmpeg |
+| 13 | **Color grade** | Apply grade; keep ungraded twin for compare / skip | FFmpeg presets |
+
+**Signature path:** `score_moments` → `plan_edit` → `validate_edl` → FFmpeg picture lock — agent plans, tools execute, couple chooses sound and grade.
+
+### Building with ADK
+
+We iterated on the Film Director in the Google ADK web UI — briefing mood/tone options, then running tool traces end-to-end (`score_moments` → `plan_edit` → `validate_edl`) before wiring the same agent into Cloud Run.
+
+![ADK Film Director chat](images/dev-cursor-and-adk.png)
 
 ---
 
@@ -106,10 +148,10 @@ Example outcome from a warm / cinematic brief: ~26s cut against a 30s target, en
 - **Agent vs. reality** — LLMs love ambitious edits; FFmpeg needs a valid EDL. Validation and scoring had to sit between “creative” and “renderable.”
 - **Latency** — early runs took 5+ minutes. Gemini, scene detection, and serial FFmpeg stacked. We cut scope (6 clips), parallelized, cached materialization, and folded grade into the stitch.
 - **Orientation** — users chose portrait but got landscape pillars until render and player aspect were aligned end-to-end.
-- **Soundtrack UX** — auto-picking music felt wrong; couples need a deliberate choice among catalog / mute / original.
-- **Retention** — session end must keep the meaningful three videos (ungraded, graded muted, selected) and drop the rest without surprising users.
-- **Split runtime** — TypeScript studio + Python agent + ClickHouse + GCS means many moving parts to keep healthy locally and in production.
-- **Waiting UX** — long silent gates fought the “AI shortcut” story; we added phase visibility, clip posters, and fewer clicks on the happy path.
+- **Soundtrack & grade authorship** — auto-picking music (and auto-advancing grade) felt wrong; couples need deliberate catalog / mute / original and keep-or-skip grade choices.
+- **ClickHouse config drift** — a wrong `CLICKHOUSE_DATABASE` secret pointed at `default` while tables lived in `marryo`. We fixed the secret and qualified every table name so scoring can’t silently miss.
+- **Split runtime** — TypeScript studio + Python agent + ClickHouse + GCS means many moving parts to keep healthy locally and in production (Cloud SQL proxy, secrets, signed GCS URLs).
+- **Shipping under time pressure** — Cloud Build + dual Cloud Run images made deploys slow; build failures and concurrent revisions taught us to harden types and ship in smaller, clearer releases.
 
 ---
 
@@ -165,5 +207,5 @@ Example outcome from a warm / cinematic brief: ~26s cut against a 30s target, en
 | [`images/architecture.png`](images/architecture.png) | Client, Cloud Run web/agent, data stores |
 | [`images/moment-scoring.png`](images/moment-scoring.png) | Moment quality_score breakdown |
 | [`images/soundtrack-scoring.png`](images/soundtrack-scoring.png) | Soundtrack weighted ranking |
-| [`images/dev-cursor-and-adk.png`](images/dev-cursor-and-adk.png) | Cursor + ADK local development |
+| [`images/dev-cursor-and-adk.png`](images/dev-cursor-and-adk.png) | ADK Film Director local development |
 | [`images/adk-director-edl.png`](images/adk-director-edl.png) | ADK tool trace and directed EDL |
