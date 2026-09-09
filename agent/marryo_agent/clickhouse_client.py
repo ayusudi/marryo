@@ -12,6 +12,15 @@ import clickhouse_connect
 from marryo_agent.schemas import MomentRecord, MomentScore
 
 
+def _database() -> str:
+    value = (os.environ.get("CLICKHOUSE_DATABASE") or "marryo").strip()
+    return value or "marryo"
+
+
+def _table(name: str) -> str:
+    return f"{_database()}.{name}"
+
+
 def _client():
     host = os.environ.get("CLICKHOUSE_HOST", "")
     if not host:
@@ -23,7 +32,7 @@ def _client():
         port=port,
         username=os.environ.get("CLICKHOUSE_USER", "default"),
         password=os.environ.get("CLICKHOUSE_PASSWORD", ""),
-        database=os.environ.get("CLICKHOUSE_DATABASE", "marryo"),
+        database=_database(),
         secure=secure,
     )
 
@@ -35,10 +44,10 @@ def _now() -> datetime:
 def query_scenes_for_project(project_id: str) -> list[dict[str, Any]]:
     client = _client()
     result = client.query(
-        """
+        f"""
         SELECT scene_id, clip_id, project_id, start_time, end_time, duration
-        FROM scenes
-        WHERE project_id = {project_id:String}
+        FROM {_table("scenes")}
+        WHERE project_id = {{project_id:String}}
         ORDER BY clip_id, start_time
         """,
         parameters={"project_id": project_id},
@@ -50,10 +59,10 @@ def query_scenes_for_project(project_id: str) -> list[dict[str, Any]]:
 def query_moments_for_project(project_id: str) -> list[dict[str, Any]]:
     client = _client()
     result = client.query(
-        """
+        f"""
         SELECT *
-        FROM video_moments
-        WHERE project_id = {project_id:String}
+        FROM {_table("video_moments")}
+        WHERE project_id = {{project_id:String}}
         ORDER BY clip_id, start_time
         """,
         parameters={"project_id": project_id},
@@ -71,8 +80,10 @@ def query_top_moments(
 ) -> list[dict[str, Any]]:
     """Direct ClickHouse fallback when MCP Toolbox is unavailable."""
     client = _client()
+    moments = _table("video_moments")
+    scores = _table("moment_scores")
     result = client.query(
-        """
+        f"""
         SELECT
             vm.moment_id AS moment_id,
             vm.scene_id AS scene_id,
@@ -88,15 +99,15 @@ def query_top_moments(
             ms.quality_score AS quality_score,
             ms.theme AS theme,
             ms.score_breakdown AS score_breakdown
-        FROM video_moments AS vm
-        INNER JOIN moment_scores AS ms
+        FROM {moments} AS vm
+        INNER JOIN {scores} AS ms
             ON vm.moment_id = ms.moment_id AND vm.project_id = ms.project_id
-        WHERE vm.project_id = {project_id:String}
-            AND vm.emotion LIKE {emotion:String}
-            AND vm.shot_type LIKE {shot_type:String}
-            AND vm.lighting LIKE {lighting:String}
+        WHERE vm.project_id = {{project_id:String}}
+            AND vm.emotion LIKE {{emotion:String}}
+            AND vm.shot_type LIKE {{shot_type:String}}
+            AND vm.lighting LIKE {{lighting:String}}
         ORDER BY ms.quality_score DESC
-        LIMIT {limit:UInt32}
+        LIMIT {{limit:UInt32}}
         """,
         parameters={
             "project_id": project_id,
@@ -115,9 +126,9 @@ def replace_moments_for_project(project_id: str, moments: list[MomentRecord]) ->
     clip_ids = list({m.clip_id for m in moments})
     if clip_ids:
         client.command(
-            """
-            ALTER TABLE video_moments DELETE WHERE project_id = {project_id:String}
-            AND clip_id IN {clip_ids:Array(String)}
+            f"""
+            ALTER TABLE {_table("video_moments")} DELETE WHERE project_id = {{project_id:String}}
+            AND clip_id IN {{clip_ids:Array(String)}}
             SETTINGS mutations_sync = 1
             """,
             parameters={"project_id": project_id, "clip_ids": clip_ids},
@@ -169,15 +180,15 @@ def replace_moments_for_project(project_id: str, moments: list[MomentRecord]) ->
         )
         for m in moments
     ]
-    client.insert("video_moments", data, column_names=columns)
+    client.insert(_table("video_moments"), data, column_names=columns)
 
 
 def replace_scores_for_project(project_id: str, theme: str, scores: list[MomentScore]) -> None:
     client = _client()
     client.command(
-        """
-        ALTER TABLE moment_scores DELETE WHERE project_id = {project_id:String}
-        AND theme = {theme:String}
+        f"""
+        ALTER TABLE {_table("moment_scores")} DELETE WHERE project_id = {{project_id:String}}
+        AND theme = {{theme:String}}
         SETTINGS mutations_sync = 1
         """,
         parameters={"project_id": project_id, "theme": theme},
@@ -203,4 +214,4 @@ def replace_scores_for_project(project_id: str, theme: str, scores: list[MomentS
         )
         for s in scores
     ]
-    client.insert("moment_scores", data, column_names=columns)
+    client.insert(_table("moment_scores"), data, column_names=columns)

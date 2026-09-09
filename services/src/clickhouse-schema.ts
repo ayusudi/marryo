@@ -130,9 +130,15 @@ function splitStatements(sql: string): string[] {
     .filter(Boolean);
 }
 
+/** Fully-qualified table name using CLICKHOUSE_DATABASE (must match DDL / schema.sql). */
+function chTable(name: "scenes" | "video_moments" | "moment_scores"): string {
+  return `${env().CLICKHOUSE_DATABASE}.${name}`;
+}
+
 function bootstrapClient() {
   const config = env();
   const protocol = config.CLICKHOUSE_PORT === 8123 ? "http" : "https";
+  // Connect to `default` so CREATE DATABASE IF NOT EXISTS <app db> can run.
   return createClient({
     url: `${protocol}://${config.CLICKHOUSE_HOST}:${config.CLICKHOUSE_PORT}`,
     database: "default",
@@ -175,8 +181,7 @@ export interface SceneRecordInput {
 async function deleteScenesForClips(projectId: string, clipIds: string[]): Promise<void> {
   const client = clickhouse();
   await client.command({
-    query:
-      "ALTER TABLE marryo.scenes DELETE WHERE project_id = {projectId:String} AND clip_id IN ({clipIds:Array(String)})",
+    query: `ALTER TABLE ${chTable("scenes")} DELETE WHERE project_id = {projectId:String} AND clip_id IN ({clipIds:Array(String)})`,
     query_params: { projectId, clipIds },
     // Wait for the mutation, but do not hang past request_timeout (120s).
     clickhouse_settings: { mutations_sync: "1" },
@@ -232,9 +237,10 @@ export async function replaceScenesForProject(
 
   if (allRows.length > 0) {
     const client = clickhouse();
+    const table = chTable("scenes");
     try {
       await client.insert({
-        table: "scenes",
+        table,
         values: allRows,
         format: "JSONEachRow",
       });
@@ -242,7 +248,7 @@ export async function replaceScenesForProject(
       if (!isClickHouseTimeoutError(error)) throw error;
       await ensureAlive();
       await clickhouse().insert({
-        table: "scenes",
+        table,
         values: allRows,
         format: "JSONEachRow",
       });
@@ -326,7 +332,7 @@ export async function fetchMomentsByIds(
         visual_quality,
         bride_present,
         groom_present
-      FROM marryo.video_moments
+      FROM ${chTable("video_moments")}
       WHERE project_id = {projectId:String}
         AND moment_id IN ({momentIds:Array(String)})
     `,
@@ -373,8 +379,7 @@ export async function replaceMomentsForProject(
   const client = clickhouse();
   if (clipIds.length > 0) {
     await client.command({
-      query:
-        "ALTER TABLE marryo.video_moments DELETE WHERE project_id = {projectId:String} AND clip_id IN ({clipIds:Array(String)})",
+      query: `ALTER TABLE ${chTable("video_moments")} DELETE WHERE project_id = {projectId:String} AND clip_id IN ({clipIds:Array(String)})`,
       query_params: { projectId, clipIds },
       clickhouse_settings: { mutations_sync: "1" },
     });
@@ -389,7 +394,7 @@ export async function replaceMomentsForProject(
     created_at: now,
   }));
 
-  await client.insert({ table: "video_moments", values: rows, format: "JSONEachRow" });
+  await client.insert({ table: chTable("video_moments"), values: rows, format: "JSONEachRow" });
 }
 
 /**
@@ -405,8 +410,7 @@ export async function replaceScoresForProject(
 
   const client = clickhouse();
   await client.command({
-    query:
-      "ALTER TABLE marryo.moment_scores DELETE WHERE project_id = {projectId:String} AND theme = {theme:String}",
+    query: `ALTER TABLE ${chTable("moment_scores")} DELETE WHERE project_id = {projectId:String} AND theme = {theme:String}`,
     query_params: { projectId, theme },
     clickhouse_settings: { mutations_sync: "1" },
   });
@@ -423,7 +427,7 @@ export async function replaceScoresForProject(
     created_at: now,
   }));
 
-  await client.insert({ table: "moment_scores", values: rows, format: "JSONEachRow" });
+  await client.insert({ table: chTable("moment_scores"), values: rows, format: "JSONEachRow" });
 }
 
 export interface SampleAnalyticsIds {
@@ -452,7 +456,7 @@ export async function insertSampleAnalyticsRows(
   const client = clickhouse();
 
   await client.insert({
-    table: "scenes",
+    table: chTable("scenes"),
     values: [
       {
         scene_id: sceneIds[0],
@@ -477,7 +481,7 @@ export async function insertSampleAnalyticsRows(
   });
 
   await client.insert({
-    table: "video_moments",
+    table: chTable("video_moments"),
     values: [
       {
         moment_id: momentIds[0],
@@ -547,7 +551,7 @@ export async function insertSampleAnalyticsRows(
   });
 
   await client.insert({
-    table: "moment_scores",
+    table: chTable("moment_scores"),
     values: [
       {
         moment_id: momentIds[0],

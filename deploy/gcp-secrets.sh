@@ -39,6 +39,13 @@ upsert marryo-auth-google-secret "${AUTH_GOOGLE_SECRET:-}"
 upsert marryo-clickhouse-host "${CLICKHOUSE_HOST:-}"
 upsert marryo-clickhouse-user "${CLICKHOUSE_USER:-}"
 upsert marryo-clickhouse-password "${CLICKHOUSE_PASSWORD:-}"
-upsert marryo-clickhouse-database "${CLICKHOUSE_DATABASE:-marryo}"
+# Schema DDL creates tables under `marryo` — never sync username "default" as the database.
+CH_DB="${CLICKHOUSE_DATABASE:-marryo}"
+if [ "${CH_DB}" = "default" ]; then
+  echo "warn: CLICKHOUSE_DATABASE=default would miss marryo.* tables; using marryo instead" >&2
+  CH_DB="marryo"
+fi
+upsert marryo-clickhouse-database "${CH_DB}"
+
 
 echo "Secrets synced."
